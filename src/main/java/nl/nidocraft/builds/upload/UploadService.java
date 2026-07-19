@@ -5,6 +5,7 @@ import com.mongodb.client.model.ReplaceOptions;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import nl.nidocraft.builds.storage.BuildRepository;
+import nl.nidocraft.builds.model.BuildVersion;
 import nl.nidocraft.builds.world.SchematicService;
 import org.bson.Document;
 import org.bukkit.Bukkit;
@@ -48,6 +49,7 @@ public final class UploadService implements AutoCloseable {
     private final MongoCollection<Document> uploads;
     private final SchematicService schematics;
     private final Path root;
+    private final Path versionsRoot;
     private final SecureRandom random = new SecureRandom();
     private final long maxBytes;
     private final int maxDimension;
@@ -60,6 +62,7 @@ public final class UploadService implements AutoCloseable {
     public UploadService(JavaPlugin plugin, BuildRepository repository, SchematicService schematics, Path storageRoot) throws IOException {
         this.plugin = plugin; this.repository = repository; this.uploads = repository.uploads(); this.schematics = schematics;
         root = storageRoot.resolve("uploads").toAbsolutePath().normalize(); Files.createDirectories(root);
+        versionsRoot = storageRoot.resolve("versions").toAbsolutePath().normalize();
         maxBytes = plugin.getConfig().getLong("upload.max-bytes", 16 * 1024 * 1024L);
         maxDimension = plugin.getConfig().getInt("upload.max-dimension", 512);
         maxVolume = plugin.getConfig().getLong("upload.max-volume", 64L * 1024 * 1024);
@@ -84,6 +87,22 @@ public final class UploadService implements AutoCloseable {
                 .append("status", "TOKEN").append("createdAt", now).append("expiresAt", now + validMillis), new ReplaceOptions().upsert(true));
         repository.audit(player.getUniqueId(), "UPLOAD_TOKEN_CREATE", null, new Document("tokenHash", hash));
         return publicUrl + "/?token=" + token;
+    }
+
+    public String createDownloadLink(Player player, BuildVersion version) throws Exception {
+        if (!player.isOnline() || !player.hasPermission("nidobuilds.backup.download")) throw new SecurityException("Admin or owner permission required.");
+        Path path = version.schematic().toAbsolutePath().normalize();
+        if (!path.startsWith(versionsRoot) || !Files.isRegularFile(path)) throw new SecurityException("Backup file is outside secure version storage or missing.");
+        byte[] bytes = new byte[32]; random.nextBytes(bytes);
+        String token = Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
+        String hash = hash(token.getBytes(StandardCharsets.UTF_8)); long now = System.currentTimeMillis();
+        uploads.updateMany(and(eq("playerId", player.getUniqueId().toString()), eq("status", "DOWNLOAD_TOKEN")), set("status", "SUPERSEDED"));
+        uploads.replaceOne(eq("_id", hash), new Document("_id", hash).append("playerId", player.getUniqueId().toString()).append("playerName", player.getName())
+                .append("status", "DOWNLOAD_TOKEN").append("createdAt", now).append("expiresAt", now + validMillis)
+                .append("worldId", version.worldId()).append("version", version.number()).append("path", path.toString())
+                .append("size", version.size()).append("filename", version.worldId() + "-v" + version.number() + ".schem"), new ReplaceOptions().upsert(true));
+        repository.audit(player.getUniqueId(), "BACKUP_DOWNLOAD_TOKEN_CREATE", version.worldId(), new Document("version", version.number()).append("tokenHash", hash));
+        return publicUrl + "/?download=" + token;
     }
 
     public Document ready(UUID playerId) { return uploads.find(and(eq("playerId", playerId.toString()), eq("status", "READY"))).sort(new Document("createdAt", -1)).first(); }
@@ -135,7 +154,9 @@ public final class UploadService implements AutoCloseable {
         securityHeaders(exchange);
         try {
             if (!exchange.getRequestURI().getPath().equals("/")) { respond(exchange, 404, "Not found", "text/plain; charset=utf-8"); return; }
-            String token = queryToken(exchange.getRequestURI());
+            String downloadToken = queryToken(exchange.getRequestURI(), "download");
+            if (downloadToken != null) { download(exchange, downloadToken); return; }
+            String token = queryToken(exchange.getRequestURI(), "token");
             Document invitation = token == null ? null : uploads.find(eq("_id", hash(token.getBytes(StandardCharsets.UTF_8)))).first();
             if (!valid(invitation)) { respond(exchange, 403, "This upload link is invalid, expired or already used.", "text/plain; charset=utf-8"); return; }
             UUID playerId = UUID.fromString(invitation.getString("playerId"));
@@ -147,6 +168,30 @@ public final class UploadService implements AutoCloseable {
             plugin.getLogger().warning("Schematic upload rejected: " + exception.getMessage());
             if (exchange.getResponseCode() < 0) respond(exchange, 400, "Upload rejected: " + safeMessage(exception), "text/plain; charset=utf-8");
         } finally { exchange.close(); }
+    }
+
+    private void download(HttpExchange exchange, String token) throws Exception {
+        if (!exchange.getRequestMethod().equalsIgnoreCase("GET")) { respond(exchange, 405, "Method not allowed", "text/plain; charset=utf-8"); return; }
+        String tokenHash = hash(token.getBytes(StandardCharsets.UTF_8));
+        Document invitation = uploads.find(eq("_id", tokenHash)).first();
+        Number expires = invitation == null ? null : invitation.get("expiresAt", Number.class);
+        if (invitation == null || !"DOWNLOAD_TOKEN".equals(invitation.getString("status")) || expires == null || expires.longValue() < System.currentTimeMillis()) {
+            respond(exchange, 403, "This download link is invalid, expired or already used.", "text/plain; charset=utf-8"); return;
+        }
+        UUID playerId = UUID.fromString(invitation.getString("playerId"));
+        if (!isOnline(playerId, "nidobuilds.backup.download")) { respond(exchange, 403, "You must remain online on the build server.", "text/plain; charset=utf-8"); return; }
+        Path path = Path.of(invitation.getString("path")).toAbsolutePath().normalize();
+        if (!path.startsWith(versionsRoot) || !Files.isRegularFile(path)) { respond(exchange, 404, "Backup file not found.", "text/plain; charset=utf-8"); return; }
+        long changed = uploads.updateOne(and(eq("_id", tokenHash), eq("status", "DOWNLOAD_TOKEN")), combine(set("status", "DOWNLOADING"), set("downloadStartedAt", System.currentTimeMillis()))).getModifiedCount();
+        if (changed != 1) { respond(exchange, 409, "This link is already being used.", "text/plain; charset=utf-8"); return; }
+        String filename = invitation.getString("filename");
+        exchange.getResponseHeaders().set("Content-Type", "application/octet-stream");
+        exchange.getResponseHeaders().set("Content-Disposition", "attachment; filename=\"" + filename + "\"");
+        exchange.sendResponseHeaders(200, Files.size(path));
+        try (InputStream input = Files.newInputStream(path); OutputStream output = exchange.getResponseBody()) { input.transferTo(output); }
+        uploads.updateOne(eq("_id", tokenHash), combine(set("status", "CONSUMED"), set("consumedAt", System.currentTimeMillis())));
+        repository.audit(playerId, "BACKUP_DOWNLOAD_CONSUMED", invitation.getString("worldId"), new Document("version", invitation.get("version"))
+                .append("remoteAddress", exchange.getRemoteAddress().getAddress().getHostAddress()));
     }
 
     private synchronized void accept(HttpExchange exchange, Document invitation, UUID playerId) throws Exception {
@@ -182,8 +227,10 @@ public final class UploadService implements AutoCloseable {
         Number expires = invitation.get("expiresAt", Number.class); return expires != null && expires.longValue() >= System.currentTimeMillis();
     }
 
-    private boolean isOnline(UUID playerId) throws Exception {
-        Future<Boolean> result = Bukkit.getScheduler().callSyncMethod(plugin, (Callable<Boolean>) () -> { Player player = Bukkit.getPlayer(playerId); return player != null && player.isOnline() && player.hasPermission("nidobuilds.upload"); });
+    private boolean isOnline(UUID playerId) throws Exception { return isOnline(playerId, "nidobuilds.upload"); }
+
+    private boolean isOnline(UUID playerId, String permission) throws Exception {
+        Future<Boolean> result = Bukkit.getScheduler().callSyncMethod(plugin, (Callable<Boolean>) () -> { Player player = Bukkit.getPlayer(playerId); return player != null && player.isOnline() && player.hasPermission(permission); });
         return result.get();
     }
 
@@ -212,9 +259,9 @@ public final class UploadService implements AutoCloseable {
         });
     }
 
-    private String queryToken(URI uri) {
-        String query = uri.getRawQuery(); if (query == null || !query.startsWith("token=")) return null;
-        String token = query.substring(6); return token.matches("[A-Za-z0-9_-]{43}") ? token : null;
+    private String queryToken(URI uri, String key) {
+        String query = uri.getRawQuery(); if (query == null || !query.startsWith(key + "=")) return null;
+        String token = query.substring(key.length() + 1); return token.matches("[A-Za-z0-9_-]{43}") ? token : null;
     }
     private long parseLength(String value) { try { return Long.parseLong(value); } catch (Exception ignored) { return -1; } }
     private String hash(byte[] bytes) throws Exception { return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes)); }

@@ -55,7 +55,11 @@ public final class NidoBuildsPlugin extends JavaPlugin implements Listener {
             ensureLobby();
 
             signs = new SignPrompt(this);
-            WorldMenu menu = new WorldMenu(this, repository, worlds, signs);
+            if (getConfig().getBoolean("upload.enabled", true)) {
+                uploads = new UploadService(this, repository, schematics, storageRoot); uploads.start();
+                Objects.requireNonNull(getCommand("buildupload")).setExecutor(new BuildUploadCommand(uploads, repository, worlds, schematics));
+            }
+            WorldMenu menu = new WorldMenu(this, repository, worlds, signs, uploads);
             BuildCommand build = new BuildCommand(repository, worlds, menu, getConfig().getInt("default-build-radius", 64));
             PluginCommand buildCommand = Objects.requireNonNull(getCommand("build")); buildCommand.setExecutor(build); buildCommand.setTabCompleter(build);
             Bukkit.getPluginManager().registerEvents(signs, this);
@@ -63,10 +67,6 @@ public final class NidoBuildsPlugin extends JavaPlugin implements Listener {
             Bukkit.getPluginManager().registerEvents(new BuildActivityListener(repository), this);
             Bukkit.getPluginManager().registerEvents(this, this);
 
-            if (getConfig().getBoolean("upload.enabled", true)) {
-                uploads = new UploadService(this, repository, schematics, storageRoot); uploads.start();
-                Objects.requireNonNull(getCommand("buildupload")).setExecutor(new BuildUploadCommand(uploads, repository, worlds, schematics));
-            }
             long autosave = Math.max(1, getConfig().getLong("autosave-minutes", 5)) * 60L * 20L;
             Bukkit.getScheduler().runTaskTimer(this, worlds::autosave, autosave, autosave);
             if (getConfig().getBoolean("scoreboard.enabled", true)) {

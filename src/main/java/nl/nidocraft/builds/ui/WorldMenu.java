@@ -7,7 +7,10 @@ import nl.nidocraft.builds.model.BuildStatus;
 import nl.nidocraft.builds.model.BuildVersion;
 import nl.nidocraft.builds.model.BuildWorld;
 import nl.nidocraft.builds.storage.BuildRepository;
+import nl.nidocraft.builds.upload.UploadService;
 import nl.nidocraft.builds.world.BuildWorldService;
+import net.kyori.adventure.text.event.ClickEvent;
+import net.kyori.adventure.text.event.HoverEvent;
 import org.bson.Document;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
@@ -38,13 +41,14 @@ public final class WorldMenu implements Listener {
     private final BuildRepository repository;
     private final BuildWorldService worlds;
     private final SignPrompt signs;
+    private final UploadService uploads;
     private final Map<UUID, State> states = new HashMap<>();
     private final Map<UUID, Inventory> menus = new HashMap<>();
     private final Map<UUID, Long> selectedVersions = new HashMap<>();
     private static final DateTimeFormatter BACKUP_TIME = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss 'UTC'").withZone(ZoneOffset.UTC);
 
-    public WorldMenu(JavaPlugin plugin, BuildRepository repository, BuildWorldService worlds, SignPrompt signs) {
-        this.plugin = plugin; this.repository = repository; this.worlds = worlds; this.signs = signs;
+    public WorldMenu(JavaPlugin plugin, BuildRepository repository, BuildWorldService worlds, SignPrompt signs, UploadService uploads) {
+        this.plugin = plugin; this.repository = repository; this.worlds = worlds; this.signs = signs; this.uploads = uploads;
     }
 
     public void open(Player player) { open(player, states.getOrDefault(player.getUniqueId(), State.root())); }
@@ -168,6 +172,7 @@ public final class WorldMenu implements Listener {
         menu.setItem(4, backupItem(version));
         if (!world.deleted()) menu.setItem(10, item(Material.RECOVERY_COMPASS, "Restore current world", List.of("Makes a safety backup first", "Requires confirmation")));
         menu.setItem(13, item(Material.OAK_SAPLING, "Restore as a new world", List.of("Keeps the current world untouched", "Also works for deleted worlds")));
+        if (uploads != null) menu.setItem(16, item(Material.WRITABLE_BOOK, "Download .schem", List.of("Admin/owner only", "Single-use link; stay online")));
         menu.setItem(22, item(Material.ARROW, "Back", List.of()));
         states.put(player.getUniqueId(), new State(Mode.BACKUP_OPTIONS, world.id(), 0, "", null, false));
         player.openInventory(menu); menus.put(player.getUniqueId(), menu);
@@ -282,6 +287,17 @@ public final class WorldMenu implements Listener {
                 }
             });
         } else if (slot == 22) backups(player, world, 0);
+        else if (slot == 16 && uploads != null) {
+            requireDownload(player);
+            try {
+                String link = uploads.createDownloadLink(player, version);
+                Component here = Component.text("CLICK HERE", NamedTextColor.GREEN).decorate(TextDecoration.BOLD)
+                        .clickEvent(ClickEvent.openUrl(link)).hoverEvent(HoverEvent.showText(Component.text("Download " + world.id() + " v" + version.number(), NamedTextColor.GRAY)));
+                player.closeInventory();
+                player.sendMessage(Component.text("Secure backup link: ", NamedTextColor.AQUA).append(here)
+                        .append(Component.text(" (single use, expires soon, stay online)", NamedTextColor.GRAY)));
+            } catch (Exception exception) { throw new IllegalStateException(exception.getMessage(), exception); }
+        }
     }
 
     private void backupConfirmClick(Player player, State state, int slot) throws Exception {
@@ -393,6 +409,7 @@ public final class WorldMenu implements Listener {
     private void requireDelete(Player player) { if (!player.hasPermission("nidobuilds.delete")) throw new SecurityException("Admin or owner permission required."); }
     private void requirePublish(Player player) { if (!player.hasPermission("nidobuilds.publish")) throw new SecurityException("Admin or owner permission required."); }
     private void requireRestore(Player player) { if (!player.hasPermission("nidobuilds.backup.restore")) throw new SecurityException("Admin or owner permission required."); }
+    private void requireDownload(Player player) { if (!player.hasPermission("nidobuilds.backup.download")) throw new SecurityException("Admin or owner permission required."); }
     private String prettify(String id) { String[] words = id.split("[-_]"); StringBuilder result = new StringBuilder(); for (String word : words) if (!word.isBlank()) result.append(Character.toUpperCase(word.charAt(0))).append(word.substring(1)).append(' '); return result.toString().trim(); }
 
     private enum Mode { ROOT, DETAIL, DELETE, GAMEMODES, GAMERULES, ICON, BACKUPS, BACKUP_OPTIONS, BACKUP_CONFIRM, ARCHIVED }

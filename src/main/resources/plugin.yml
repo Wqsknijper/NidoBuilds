@@ -25,5 +25,7 @@ permissions:
     default: false
   nidobuilds.backup.restore:
     default: false
+  nidobuilds.backup.download:
+    default: false
   nidobuilds.upload:
     default: false

@@ -6,7 +6,7 @@ NidoBuilds is the static build-service plugin for Nidocraft. Editable Bukkit wor
 
 - `/buildserver` connects an authorized Designer, Admin or Owner from another network service to `build-1`.
 - `/build` opens the 5-row world menu. The top 4 rows contain worlds; the bottom row contains sort, status filter, sign search, paging, refresh and creation.
-- Every world detail screen has a paginated backup browser. Each immutable snapshot shows its type, creator, UTC timestamp, age, size and checksum. Admins/owners can restore it in place after confirmation or recover it as a separate new world. Deleted worlds remain available through **Deleted worlds** and keep all snapshots forever.
+- Every world detail screen has a paginated backup browser. Each immutable snapshot shows its type, creator, UTC timestamp, age, size and checksum. Admins/owners can restore it in place after confirmation, recover it as a separate new world, or create a short-lived single-use download link while they remain online. Deleted worlds remain available through **Deleted worlds** and keep all snapshots forever.
 - `/build create <id> [icon] [name]`, `/build load [id]`, `/build save [id]`, `/build ready [id]`, `/build publish [id]`, `/build delete <id>`.
 - `/build spawn <set|remove|default> <world> <id>` and `/build npc <set|remove> <world> <id>` store deployable locations.
 - Configured spawns appear in loaded build worlds as runtime-only holograms with their id and coordinates; the default spawn is highlighted. Markers are removed before save/publish/backup and never written into schematics.
