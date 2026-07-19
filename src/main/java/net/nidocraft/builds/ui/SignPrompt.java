@@ -1,4 +1,4 @@
-package nl.nidocraft.builds.ui;
+package net.nidocraft.builds.ui;
 
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.bukkit.Material;
@@ -31,7 +31,7 @@ public final class SignPrompt implements Listener {
             Block candidate = player.getLocation().getBlock().getRelative(0, offset, 0);
             if (candidate.getType().isAir()) { block = candidate; break; }
         }
-        if (block == null) throw new IllegalStateException("Geen veilige plek voor het zoekbord gevonden.");
+        if (block == null) throw new IllegalStateException("No safe location was found for the search sign.");
         BlockState original = block.getState();
         block.setType(Material.OAK_SIGN, false);
         Sign sign = (Sign) block.getState();

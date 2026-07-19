@@ -1,16 +1,16 @@
-package nl.nidocraft.builds.command;
+package net.nidocraft.builds.command;
 
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.event.ClickEvent;
 import net.kyori.adventure.text.event.HoverEvent;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.TextDecoration;
-import nl.nidocraft.builds.model.BuildVersion;
-import nl.nidocraft.builds.model.BuildWorld;
-import nl.nidocraft.builds.storage.BuildRepository;
-import nl.nidocraft.builds.upload.UploadService;
-import nl.nidocraft.builds.world.BuildWorldService;
-import nl.nidocraft.builds.world.SchematicService;
+import net.nidocraft.builds.model.BuildVersion;
+import net.nidocraft.builds.model.BuildWorld;
+import net.nidocraft.builds.storage.BuildRepository;
+import net.nidocraft.builds.upload.UploadService;
+import net.nidocraft.builds.world.BuildWorldService;
+import net.nidocraft.builds.world.SchematicService;
 import org.bson.Document;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;

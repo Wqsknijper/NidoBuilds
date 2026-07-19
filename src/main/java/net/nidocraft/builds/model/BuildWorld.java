@@ -1,4 +1,4 @@
-package nl.nidocraft.builds.model;
+package net.nidocraft.builds.model;
 
 import java.util.List;
 import java.util.Map;

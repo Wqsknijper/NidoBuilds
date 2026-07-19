@@ -1,10 +1,10 @@
-package nl.nidocraft.builds.world;
+package net.nidocraft.builds.world;
 
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.TextDecoration;
-import nl.nidocraft.builds.model.BuildLocation;
-import nl.nidocraft.builds.model.BuildWorld;
+import net.nidocraft.builds.model.BuildLocation;
+import net.nidocraft.builds.model.BuildWorld;
 import org.bukkit.Bukkit;
 import org.bukkit.NamespacedKey;
 import org.bukkit.World;

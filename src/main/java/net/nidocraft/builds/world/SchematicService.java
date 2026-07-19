@@ -1,4 +1,4 @@
-package nl.nidocraft.builds.world;
+package net.nidocraft.builds.world;
 
 import com.sk89q.worldedit.EditSession;
 import com.sk89q.worldedit.WorldEdit;
@@ -15,8 +15,8 @@ import com.sk89q.worldedit.function.operation.Operations;
 import com.sk89q.worldedit.math.BlockVector3;
 import com.sk89q.worldedit.regions.CuboidRegion;
 import com.sk89q.worldedit.session.ClipboardHolder;
-import nl.nidocraft.builds.model.BuildVersion;
-import nl.nidocraft.builds.model.BuildWorld;
+import net.nidocraft.builds.model.BuildVersion;
+import net.nidocraft.builds.model.BuildWorld;
 import org.bukkit.World;
 import org.bukkit.Location;
 import org.bukkit.entity.Entity;
@@ -104,7 +104,7 @@ public final class SchematicService {
         long volume = Math.multiplyExact(Math.multiplyExact((long) dimensions.x(), dimensions.y()), dimensions.z());
         int entities = clipboard.getEntities().size();
         if (dimensions.x() > maxDimension || dimensions.y() > maxDimension || dimensions.z() > maxDimension)
-            throw new IllegalArgumentException("Schematic is groter dan " + maxDimension + " blocks in een dimensie.");
+            throw new IllegalArgumentException("Schematic exceeds " + maxDimension + " blocks in one dimension.");
         if (volume > maxVolume) throw new IllegalArgumentException("Schematicvolume is te groot.");
         if (entities > maxEntities) throw new IllegalArgumentException("Schematic bevat te veel entities.");
         return new Validation(dimensions.x(), dimensions.y(), dimensions.z(), volume, entities);
@@ -113,7 +113,7 @@ public final class SchematicService {
     public Clipboard read(Path schematic) throws IOException {
         Path normalized = schematic.toAbsolutePath().normalize();
         ClipboardFormat format = ClipboardFormats.findByFile(normalized.toFile());
-        if (format == null) throw new IllegalArgumentException("Geen geldige WorldEdit .schem.");
+        if (format == null) throw new IllegalArgumentException("Not a valid WorldEdit .schem file.");
         try (InputStream input = Files.newInputStream(normalized); ClipboardReader reader = format.getReader(input)) {
             return reader.read();
         }
@@ -129,7 +129,7 @@ public final class SchematicService {
     }
 
     private void requireInside(Path path, Path root) {
-        if (!path.toAbsolutePath().normalize().startsWith(root.toAbsolutePath().normalize())) throw new SecurityException("Onveilig opslagpad.");
+        if (!path.toAbsolutePath().normalize().startsWith(root.toAbsolutePath().normalize())) throw new SecurityException("Unsafe storage path.");
     }
 
     public record Validation(int width, int height, int length, long volume, int entities) { }

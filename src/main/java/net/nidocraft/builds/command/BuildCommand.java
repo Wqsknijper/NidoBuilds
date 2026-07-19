@@ -1,18 +1,18 @@
-package nl.nidocraft.builds.command;
+package net.nidocraft.builds.command;
 
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
-import nl.nidocraft.builds.model.BuildLocation;
-import nl.nidocraft.builds.model.BuildStatus;
-import nl.nidocraft.builds.model.BuildVersion;
-import nl.nidocraft.builds.model.BuildWorld;
-import nl.nidocraft.builds.storage.BuildRepository;
-import nl.nidocraft.builds.ui.WorldMenu;
-import nl.nidocraft.builds.world.BuildWorldService;
+import net.nidocraft.builds.model.BuildLocation;
+import net.nidocraft.builds.model.BuildStatus;
+import net.nidocraft.builds.model.BuildVersion;
+import net.nidocraft.builds.model.BuildWorld;
+import net.nidocraft.builds.storage.BuildRepository;
+import net.nidocraft.builds.ui.WorldMenu;
+import net.nidocraft.builds.world.BuildWorldService;
 import org.bson.Document;
 import org.bukkit.Material;
 import org.bukkit.GameRule;
-import nl.nidocraft.builds.world.BuildGameRules;
+import net.nidocraft.builds.world.BuildGameRules;
 import org.bukkit.World;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;

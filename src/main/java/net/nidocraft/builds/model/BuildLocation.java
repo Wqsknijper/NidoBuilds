@@ -1,4 +1,4 @@
-package nl.nidocraft.builds.model;
+package net.nidocraft.builds.model;
 
 import org.bukkit.Location;
 import org.bukkit.World;

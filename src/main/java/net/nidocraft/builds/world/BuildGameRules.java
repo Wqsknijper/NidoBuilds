@@ -1,4 +1,4 @@
-package nl.nidocraft.builds.world;
+package net.nidocraft.builds.world;
 
 import org.bukkit.GameRule;
 import org.bukkit.World;

@@ -1,4 +1,4 @@
-package nl.nidocraft.builds.storage;
+package net.nidocraft.builds.storage;
 
 import com.mongodb.client.MongoClient;
 import com.mongodb.client.MongoClients;
@@ -7,11 +7,11 @@ import com.mongodb.client.MongoDatabase;
 import com.mongodb.client.model.IndexOptions;
 import com.mongodb.client.model.Indexes;
 import com.mongodb.client.model.ReplaceOptions;
-import nl.nidocraft.builds.model.BuildLocation;
-import nl.nidocraft.builds.model.BuildStatus;
-import nl.nidocraft.builds.model.BuildVersion;
-import nl.nidocraft.builds.model.BuildWorld;
-import nl.nidocraft.builds.world.BuildGameRules;
+import net.nidocraft.builds.model.BuildLocation;
+import net.nidocraft.builds.model.BuildStatus;
+import net.nidocraft.builds.model.BuildVersion;
+import net.nidocraft.builds.model.BuildWorld;
+import net.nidocraft.builds.world.BuildGameRules;
 import org.bson.Document;
 
 import java.nio.file.Path;
@@ -60,7 +60,7 @@ public final class BuildRepository implements AutoCloseable {
     }
 
     public synchronized BuildWorld create(String id, String name, String icon, int radius, UUID actor) {
-        if (worlds.find(eq("_id", id)).first() != null) throw new IllegalArgumentException("World-id bestaat al.");
+        if (worlds.find(eq("_id", id)).first() != null) throw new IllegalArgumentException("World id already exists.");
         long now = System.currentTimeMillis();
         Document value = new Document("_id", id).append("name", name).append("status", BuildStatus.EMPTY.name())
                 .append("icon", icon).append("theme", "Unspecified").append("radius", radius)
@@ -129,13 +129,13 @@ public final class BuildRepository implements AutoCloseable {
     }
 
     public void setText(String worldId, String field, String value, UUID actor) {
-        if (!Set.of("name", "theme", "icon").contains(field)) throw new IllegalArgumentException("Onveilig veld.");
+        if (!Set.of("name", "theme", "icon").contains(field)) throw new IllegalArgumentException("Unsafe field.");
         worlds.updateOne(eq("_id", worldId), combine(set(field, value), set("updatedAt", System.currentTimeMillis())));
         audit(actor, "WORLD_EDIT_" + field.toUpperCase(Locale.ROOT), worldId, new Document("value", value));
     }
 
     public void setLocations(String worldId, String field, List<BuildLocation> locations, String defaultSpawnId, UUID actor) {
-        if (!Set.of("spawns", "npcs").contains(field)) throw new IllegalArgumentException("Onveilig locatieveld.");
+        if (!Set.of("spawns", "npcs").contains(field)) throw new IllegalArgumentException("Unsafe location field.");
         List<Document> encoded = locations.stream().map(BuildLocation::toDocument).toList();
         List<org.bson.conversions.Bson> updates = new ArrayList<>(List.of(set(field, encoded), set("updatedAt", System.currentTimeMillis())));
         if (field.equals("spawns")) updates.add(set("defaultSpawnId", defaultSpawnId));
@@ -157,7 +157,7 @@ public final class BuildRepository implements AutoCloseable {
 
     public boolean toggleGamemode(String worldId, String gamemodeId, UUID actor) {
         Document game = gamemodes.find(eq("_id", gamemodeId)).first();
-        if (game == null) throw new IllegalArgumentException("Onbekende gamemode: " + gamemodeId);
+        if (game == null) throw new IllegalArgumentException("Unknown game mode: " + gamemodeId);
         BuildWorld world = find(worldId).orElseThrow();
         List<String> selected = new ArrayList<>(world.gamemodes());
         if (!selected.remove(gamemodeId)) selected.add(gamemodeId);
@@ -172,8 +172,8 @@ public final class BuildRepository implements AutoCloseable {
 
     public void activateForGamemode(String worldId, String gamemodeId, UUID actor) {
         BuildWorld world = find(worldId).orElseThrow();
-        if (world.publishedVersion() == null) throw new IllegalStateException("Publiceer deze world eerst.");
-        if (!world.gamemodes().contains(gamemodeId)) throw new IllegalStateException("Selecteer deze gamemode eerst voor de world.");
+        if (world.publishedVersion() == null) throw new IllegalStateException("Publish this world first.");
+        if (!world.gamemodes().contains(gamemodeId)) throw new IllegalStateException("Select this game mode for the world first.");
         gamemodes.updateOne(eq("_id", gamemodeId), combine(set("activeWorldId", worldId), set("activeVersion", world.publishedVersion()), set("updatedAt", System.currentTimeMillis())));
         audit(actor, "GAMEMODE_WORLD_ACTIVATE", worldId, new Document("gamemode", gamemodeId).append("version", world.publishedVersion()));
     }

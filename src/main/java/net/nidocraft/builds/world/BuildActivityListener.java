@@ -1,7 +1,7 @@
-package nl.nidocraft.builds.world;
+package net.nidocraft.builds.world;
 
-import nl.nidocraft.builds.model.BuildStatus;
-import nl.nidocraft.builds.storage.BuildRepository;
+import net.nidocraft.builds.model.BuildStatus;
+import net.nidocraft.builds.storage.BuildRepository;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockBreakEvent;

@@ -1,12 +1,12 @@
-package nl.nidocraft.builds.upload;
+package net.nidocraft.builds.upload;
 
 import com.mongodb.client.MongoCollection;
 import com.mongodb.client.model.ReplaceOptions;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
-import nl.nidocraft.builds.storage.BuildRepository;
-import nl.nidocraft.builds.model.BuildVersion;
-import nl.nidocraft.builds.world.SchematicService;
+import net.nidocraft.builds.storage.BuildRepository;
+import net.nidocraft.builds.model.BuildVersion;
+import net.nidocraft.builds.world.SchematicService;
 import org.bson.Document;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;

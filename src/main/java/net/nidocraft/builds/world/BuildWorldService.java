@@ -1,9 +1,9 @@
-package nl.nidocraft.builds.world;
+package net.nidocraft.builds.world;
 
-import nl.nidocraft.builds.model.BuildStatus;
-import nl.nidocraft.builds.model.BuildVersion;
-import nl.nidocraft.builds.model.BuildWorld;
-import nl.nidocraft.builds.storage.BuildRepository;
+import net.nidocraft.builds.model.BuildStatus;
+import net.nidocraft.builds.model.BuildVersion;
+import net.nidocraft.builds.model.BuildWorld;
+import net.nidocraft.builds.storage.BuildRepository;
 import org.bukkit.Bukkit;
 import org.bukkit.GameRule;
 import org.bukkit.Location;
@@ -60,8 +60,8 @@ public final class BuildWorldService {
     }
 
     public BuildVersion save(String id, String kind, UUID actor) throws Exception {
-        BuildWorld build = repository.find(id).filter(value -> !value.deleted()).orElseThrow(() -> new IllegalArgumentException("Onbekende world."));
-        if (!saving.add(id)) throw new IllegalStateException("Deze world wordt al opgeslagen.");
+        BuildWorld build = repository.find(id).filter(value -> !value.deleted()).orElseThrow(() -> new IllegalArgumentException("Unknown world."));
+        if (!saving.add(id)) throw new IllegalStateException("This world is already being saved.");
         try {
             World world = load(build);
             if (spawnVisualizer != null) spawnVisualizer.hide(world);
@@ -90,8 +90,8 @@ public final class BuildWorldService {
     }
 
     public void restore(String id, long versionNumber, UUID actor) throws Exception {
-        BuildWorld build = repository.find(id).filter(value -> !value.deleted()).orElseThrow(() -> new IllegalArgumentException("Onbekende world."));
-        BuildVersion version = repository.version(id, versionNumber).orElseThrow(() -> new IllegalArgumentException("Onbekende backupversie."));
+        BuildWorld build = repository.find(id).filter(value -> !value.deleted()).orElseThrow(() -> new IllegalArgumentException("Unknown world."));
+        BuildVersion version = repository.version(id, versionNumber).orElseThrow(() -> new IllegalArgumentException("Unknown backup version."));
         save(id, "before-restore", actor);
         schematics.paste(version.schematic(), load(build), build);
         repository.setStatus(id, BuildStatus.EDITED, actor);
@@ -100,9 +100,9 @@ public final class BuildWorldService {
     }
 
     public BuildWorld restoreAsNew(String sourceId, long versionNumber, String rawId, UUID actor) throws Exception {
-        BuildWorld source = repository.find(sourceId).orElseThrow(() -> new IllegalArgumentException("Onbekende bronworld."));
-        BuildVersion version = repository.version(sourceId, versionNumber).orElseThrow(() -> new IllegalArgumentException("Onbekende backupversie."));
-        if (!Files.isRegularFile(version.schematic())) throw new IllegalStateException("Het backupbestand ontbreekt op disk.");
+        BuildWorld source = repository.find(sourceId).orElseThrow(() -> new IllegalArgumentException("Unknown source world."));
+        BuildVersion version = repository.version(sourceId, versionNumber).orElseThrow(() -> new IllegalArgumentException("Unknown backup version."));
+        if (!Files.isRegularFile(version.schematic())) throw new IllegalStateException("The backup file is missing from disk.");
         String id = rawId.toLowerCase(Locale.ROOT).replace(' ', '-');
         String suffix = " backup v" + versionNumber;
         String baseName = source.name().substring(0, Math.min(source.name().length(), 32 - Math.min(31, suffix.length())));
@@ -128,7 +128,7 @@ public final class BuildWorldService {
     }
 
     public BuildVersion delete(String id, UUID actor) throws Exception {
-        BuildWorld build = repository.find(id).filter(value -> !value.deleted()).orElseThrow(() -> new IllegalArgumentException("Onbekende world."));
+        BuildWorld build = repository.find(id).filter(value -> !value.deleted()).orElseThrow(() -> new IllegalArgumentException("Unknown world."));
         BuildVersion finalBackup = save(id, "deleted", actor);
         World world = Bukkit.getWorld(build.bukkitWorldName());
         Path source = world == null ? null : world.getWorldFolder().toPath().toAbsolutePath().normalize();
@@ -143,9 +143,9 @@ public final class BuildWorldService {
         }
         if (source == null) source = worldsPathFallback(build.bukkitWorldName());
         Path serviceRoot = Path.of("").toAbsolutePath().normalize();
-        if (!source.startsWith(serviceRoot)) throw new SecurityException("Worldfolder buiten de buildservice geweigerd.");
+        if (!source.startsWith(serviceRoot)) throw new SecurityException("World directory outside the build service was rejected.");
         Path destination = archivesRoot.resolve(build.id() + "-" + System.currentTimeMillis()).normalize();
-        if (!destination.startsWith(archivesRoot)) throw new SecurityException("Onveilig archiefpad.");
+        if (!destination.startsWith(archivesRoot)) throw new SecurityException("Unsafe archive path.");
         if (Files.exists(source)) Files.move(source, destination, StandardCopyOption.ATOMIC_MOVE);
         repository.markDeleted(id, actor);
         return finalBackup;
@@ -160,13 +160,13 @@ public final class BuildWorldService {
         for (BuildWorld build : repository.list(false)) {
             if (Bukkit.getWorld(build.bukkitWorldName()) == null || saving.contains(build.id())) continue;
             try { save(build.id(), "autosave", system); }
-            catch (Exception exception) { plugin.getLogger().severe("Autosave " + build.id() + " mislukt: " + exception.getMessage()); }
+            catch (Exception exception) { plugin.getLogger().severe("Autosave failed for " + build.id() + ": " + exception.getMessage()); }
         }
     }
 
     private World createWorld(BuildWorld build) {
         World world = new WorldCreator(build.bukkitWorldName()).generator(generator).generateStructures(false).createWorld();
-        if (world == null) throw new IllegalStateException("World kon niet worden gemaakt.");
+        if (world == null) throw new IllegalStateException("World could not be created.");
         world.setAutoSave(true);
         BuildGameRules.apply(world, build.gameRules());
         world.setTime(6000);

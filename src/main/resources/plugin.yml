@@ -1,6 +1,6 @@
 name: NidoBuilds
 version: '${project.version}'
-main: nl.nidocraft.builds.NidoBuildsPlugin
+main: net.nidocraft.builds.NidoBuildsPlugin
 api-version: '26.2'
 authors: [Nidocraft]
 description: Persistent build workflow and published schematic library for Nidocraft

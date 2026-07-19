@@ -1,4 +1,4 @@
-package nl.nidocraft.builds.world;
+package net.nidocraft.builds.world;
 
 import org.bukkit.HeightMap;
 import org.bukkit.Location;
