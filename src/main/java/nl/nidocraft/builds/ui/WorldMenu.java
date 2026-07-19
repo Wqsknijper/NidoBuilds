@@ -198,7 +198,7 @@ public final class WorldMenu implements Listener {
         if (slot < 0 || slot >= entries.size() || slot >= 18) return;
         Map.Entry<String, String> entry = entries.get(slot); String value;
         if (entry.getValue().equals("true") || entry.getValue().equals("false")) value = Boolean.toString(!Boolean.parseBoolean(entry.getValue()));
-        else { int current = Integer.parseInt(entry.getValue()); int amount = shift ? 10 : 1; value = Integer.toString(current + (rightClick ? -amount : amount)); }
+        else { int current = Integer.parseInt(entry.getValue()); int amount = shift ? 10 : 1; value = Integer.toString(Math.max(0, current + (rightClick ? -amount : amount))); }
         repository.setGameRule(world.id(), entry.getKey(), value, player.getUniqueId());
         worlds.load(repository.find(world.id()).orElseThrow());
         gamerules(player, repository.find(world.id()).orElseThrow());

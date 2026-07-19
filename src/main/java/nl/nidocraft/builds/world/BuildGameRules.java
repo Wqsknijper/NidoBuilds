@@ -46,7 +46,11 @@ public final class BuildGameRules {
             if (!lower.equals("true") && !lower.equals("false")) throw new IllegalArgumentException("Boolean gamerule requires true or false.");
             return lower;
         }
-        try { return Integer.toString(Integer.parseInt(input)); }
+        try {
+            int value = Integer.parseInt(input);
+            if (value < 0) throw new IllegalArgumentException("Integer gamerule cannot be negative.");
+            return Integer.toString(value);
+        }
         catch (NumberFormatException exception) { throw new IllegalArgumentException("Integer gamerule requires a whole number."); }
     }
 
