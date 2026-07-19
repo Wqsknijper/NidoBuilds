@@ -1,12 +1,13 @@
 package nl.nidocraft.builds.model;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 public record BuildWorld(
         String id, String name, BuildStatus status, String icon, String theme, int radius,
         List<String> gamemodes, List<BuildLocation> spawns, List<BuildLocation> npcs,
-        String defaultSpawnId, long currentVersion, Long publishedVersion, long updatedAt, boolean deleted
+        String defaultSpawnId, Map<String, String> gameRules, long currentVersion, Long publishedVersion, long updatedAt, boolean deleted
 ) {
     public String bukkitWorldName() { return "build_" + id; }
     public Optional<BuildLocation> defaultSpawn() {

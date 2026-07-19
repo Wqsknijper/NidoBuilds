@@ -9,6 +9,7 @@ import nl.nidocraft.builds.ui.WorldMenu;
 import nl.nidocraft.builds.upload.UploadService;
 import nl.nidocraft.builds.world.BuildActivityListener;
 import nl.nidocraft.builds.world.BuildWorldService;
+import nl.nidocraft.builds.world.BuildGameRules;
 import nl.nidocraft.builds.world.SchematicService;
 import nl.nidocraft.builds.world.VoidChunkGenerator;
 import org.bukkit.Bukkit;
@@ -81,6 +82,7 @@ public final class NidoBuildsPlugin extends JavaPlugin implements Listener {
         int y = Math.max(64, lobby.getMinHeight() + 2);
         for (int x = -2; x <= 2; x++) for (int z = -2; z <= 2; z++) lobby.getBlockAt(x, y - 1, z).setType(Material.BARRIER, false);
         lobby.setSpawnLocation(new Location(lobby, 0.5, y, 0.5)); lobby.setTime(6000); lobby.setAutoSave(true);
+        BuildGameRules.apply(lobby, BuildGameRules.defaults());
     }
 
     @EventHandler public void join(PlayerJoinEvent event) {

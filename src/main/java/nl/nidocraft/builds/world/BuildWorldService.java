@@ -51,6 +51,7 @@ public final class BuildWorldService {
     public World load(BuildWorld build) {
         World world = Bukkit.getWorld(build.bukkitWorldName());
         if (world == null) world = createWorld(build);
+        BuildGameRules.apply(world, build.gameRules());
         return world;
     }
 
@@ -127,8 +128,7 @@ public final class BuildWorldService {
         World world = new WorldCreator(build.bukkitWorldName()).generator(generator).generateStructures(false).createWorld();
         if (world == null) throw new IllegalStateException("World kon niet worden gemaakt.");
         world.setAutoSave(true);
-        world.setGameRule(GameRule.DO_MOB_SPAWNING, false);
-        world.setGameRule(GameRule.DO_DAYLIGHT_CYCLE, false);
+        BuildGameRules.apply(world, build.gameRules());
         world.setTime(6000);
         world.setSpawnLocation(0, Math.max(64, world.getMinHeight() + 2), 0);
         return world;

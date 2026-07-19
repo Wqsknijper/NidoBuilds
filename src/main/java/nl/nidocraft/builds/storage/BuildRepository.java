@@ -11,6 +11,7 @@ import nl.nidocraft.builds.model.BuildLocation;
 import nl.nidocraft.builds.model.BuildStatus;
 import nl.nidocraft.builds.model.BuildVersion;
 import nl.nidocraft.builds.model.BuildWorld;
+import nl.nidocraft.builds.world.BuildGameRules;
 import org.bson.Document;
 
 import java.nio.file.Path;
@@ -19,6 +20,8 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -53,6 +56,7 @@ public final class BuildRepository implements AutoCloseable {
         uploads.createIndex(Indexes.ascending("expiresAt"));
         seedGamemode("lobby", "Lobby");
         seedGamemode("build", "Build");
+        ensureGameRuleDefaults();
     }
 
     public synchronized BuildWorld create(String id, String name, String icon, int radius, UUID actor) {
@@ -61,6 +65,7 @@ public final class BuildRepository implements AutoCloseable {
         Document value = new Document("_id", id).append("name", name).append("status", BuildStatus.EMPTY.name())
                 .append("icon", icon).append("theme", "Unspecified").append("radius", radius)
                 .append("gamemodes", List.of()).append("spawns", List.of()).append("npcs", List.of())
+                .append("gameRules", new Document(BuildGameRules.defaults()))
                 .append("defaultSpawnId", null).append("currentVersion", 0L).append("publishedVersion", null)
                 .append("updatedAt", now).append("deleted", false).append("createdBy", actor.toString());
         worlds.insertOne(value);
@@ -138,6 +143,12 @@ public final class BuildRepository implements AutoCloseable {
         audit(actor, "WORLD_EDIT_" + field.toUpperCase(Locale.ROOT), worldId, new Document("count", locations.size()).append("default", defaultSpawnId));
     }
 
+    public void setGameRule(String worldId, String ruleName, String value, UUID actor) {
+        String name = BuildGameRules.normalizeName(ruleName); String normalized = BuildGameRules.normalizeValue(name, value);
+        worlds.updateOne(eq("_id", worldId), combine(set("gameRules." + name, normalized), set("status", BuildStatus.EDITED.name()), set("updatedAt", System.currentTimeMillis())));
+        audit(actor, "WORLD_GAMERULE_SET", worldId, new Document("rule", name).append("value", normalized));
+    }
+
     public List<Document> gamemodes() {
         List<Document> result = new ArrayList<>();
         gamemodes.find().sort(new Document("name", 1)).into(result);
@@ -181,9 +192,24 @@ public final class BuildRepository implements AutoCloseable {
         Number updated = document.get("updatedAt", Number.class);
         return new BuildWorld(document.getString("_id"), document.getString("name"), BuildStatus.valueOf(document.getString("status")),
                 document.getString("icon"), document.getString("theme"), document.getInteger("radius", 64),
-                document.getList("gamemodes", String.class, List.of()), spawns, npcs, document.getString("defaultSpawnId"),
+                document.getList("gamemodes", String.class, List.of()), spawns, npcs, document.getString("defaultSpawnId"), gameRules(document),
                 current == null ? 0 : current.longValue(), published == null ? null : published.longValue(),
                 updated == null ? 0 : updated.longValue(), document.getBoolean("deleted", false));
+    }
+
+    private Map<String, String> gameRules(Document document) {
+        Map<String, String> result = new LinkedHashMap<>(BuildGameRules.defaults());
+        Document stored = document.get("gameRules", Document.class);
+        if (stored != null) stored.forEach((name, value) -> { if (value != null) result.put(name, String.valueOf(value)); });
+        return Map.copyOf(result);
+    }
+
+    private void ensureGameRuleDefaults() {
+        for (Document world : worlds.find()) {
+            Document stored = world.get("gameRules", Document.class); Document merged = new Document(BuildGameRules.defaults());
+            if (stored != null) stored.forEach(merged::put);
+            worlds.updateOne(eq("_id", world.getString("_id")), set("gameRules", merged));
+        }
     }
 
     @SuppressWarnings("unchecked")

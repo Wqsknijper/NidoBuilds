@@ -77,6 +77,7 @@ public final class WorldMenu implements Listener {
         menu.setItem(14, item(Material.EMERALD, "Publish", List.of("Creates an immutable version")));
         menu.setItem(15, item(Material.CHEST, "Save", List.of("Creates a manual backup")));
         menu.setItem(16, item(Material.BARRIER, "Delete", List.of("Final backup is kept forever")));
+        menu.setItem(17, item(Material.REPEATER, "Game rules", List.of(world.gameRules().size() + " configured", "Defaults are deployment-safe")));
         menu.setItem(22, item(Material.ARROW, "Back", List.of()));
         states.put(player.getUniqueId(), new State(Mode.DETAIL, world.id(), 0, "", null, false));
         player.openInventory(menu);
@@ -108,6 +109,20 @@ public final class WorldMenu implements Listener {
         menus.put(player.getUniqueId(), menu);
     }
 
+    private void gamerules(Player player, BuildWorld world) {
+        Inventory menu = Bukkit.createInventory(null, 27, Component.text("Game rules: " + world.name(), NamedTextColor.DARK_AQUA));
+        List<Map.Entry<String, String>> entries = world.gameRules().entrySet().stream().sorted(Map.Entry.comparingByKey()).toList();
+        for (int slot = 0; slot < Math.min(18, entries.size()); slot++) {
+            Map.Entry<String, String> entry = entries.get(slot); boolean bool = entry.getValue().equals("true") || entry.getValue().equals("false");
+            menu.setItem(slot, item(bool ? Material.LEVER : Material.COMPARATOR, entry.getKey(), bool
+                    ? List.of("Value: " + entry.getValue(), "Click to toggle")
+                    : List.of("Value: " + entry.getValue(), "Left/right: +1/-1", "Shift: +10/-10")));
+        }
+        menu.setItem(22, item(Material.ARROW, "Back", List.of()));
+        states.put(player.getUniqueId(), new State(Mode.GAMERULES, world.id(), 0, "", null, false));
+        player.openInventory(menu); menus.put(player.getUniqueId(), menu);
+    }
+
     private void chooseIcon(Player player, String id) {
         Inventory menu = Bukkit.createInventory(null, 27, Component.text("Choose icon for " + id, NamedTextColor.DARK_AQUA));
         List<Material> icons = List.of(Material.GRASS_BLOCK, Material.BRICKS, Material.OAK_LOG, Material.STONE_BRICKS, Material.COBBLESTONE_WALL,
@@ -131,6 +146,7 @@ public final class WorldMenu implements Listener {
                 case DETAIL -> detailClick(player, repository.find(state.worldId).orElseThrow(), slot);
                 case DELETE -> { if (slot == 11) detail(player, repository.find(state.worldId).orElseThrow()); else if (slot == 15) { requireDelete(player); worlds.delete(state.worldId, player.getUniqueId()); player.sendMessage(Component.text("World deleted; final backup retained forever.", NamedTextColor.GREEN)); open(player, State.root()); } }
                 case GAMEMODES -> gamemodeClick(player, state, slot, event.isRightClick());
+                case GAMERULES -> gameruleClick(player, state, slot, event.isRightClick(), event.isShiftClick());
                 case ICON -> { if (slot < 18 && event.getCurrentItem() != null) { requireManage(player); BuildWorld created = worlds.create(state.worldId, prettify(state.worldId), event.getCurrentItem().getType().name(), player.getUniqueId(), plugin.getConfig().getInt("default-build-radius", 64)); detail(player, created); } }
             }
         } catch (Exception exception) { player.sendMessage(Component.text(exception.getMessage() == null ? exception.getClass().getSimpleName() : exception.getMessage(), NamedTextColor.RED)); }
@@ -160,6 +176,7 @@ public final class WorldMenu implements Listener {
         else if (slot == 14) { requirePublish(player); long version = worlds.publish(world.id(), player.getUniqueId()).number(); player.sendMessage(Component.text("Published as version " + version, NamedTextColor.GREEN)); detail(player, repository.find(world.id()).orElseThrow()); }
         else if (slot == 15) { long version = worlds.save(world.id(), "manual", player.getUniqueId()).number(); player.sendMessage(Component.text("Saved backup version " + version, NamedTextColor.GREEN)); detail(player, repository.find(world.id()).orElseThrow()); }
         else if (slot == 16) { requireDelete(player); confirmDelete(player, world); }
+        else if (slot == 17) gamerules(player, world);
         else if (slot == 22) open(player, State.root());
     }
 
@@ -172,6 +189,19 @@ public final class WorldMenu implements Listener {
         String id = games.get(slot).getString("_id");
         if (activate) repository.activateForGamemode(world.id(), id, player.getUniqueId()); else repository.toggleGamemode(world.id(), id, player.getUniqueId());
         gamemodes(player, repository.find(world.id()).orElseThrow());
+    }
+
+    private void gameruleClick(Player player, State state, int slot, boolean rightClick, boolean shift) {
+        BuildWorld world = repository.find(state.worldId).orElseThrow();
+        if (slot == 22) { detail(player, world); return; }
+        List<Map.Entry<String, String>> entries = world.gameRules().entrySet().stream().sorted(Map.Entry.comparingByKey()).toList();
+        if (slot < 0 || slot >= entries.size() || slot >= 18) return;
+        Map.Entry<String, String> entry = entries.get(slot); String value;
+        if (entry.getValue().equals("true") || entry.getValue().equals("false")) value = Boolean.toString(!Boolean.parseBoolean(entry.getValue()));
+        else { int current = Integer.parseInt(entry.getValue()); int amount = shift ? 10 : 1; value = Integer.toString(current + (rightClick ? -amount : amount)); }
+        repository.setGameRule(world.id(), entry.getKey(), value, player.getUniqueId());
+        worlds.load(repository.find(world.id()).orElseThrow());
+        gamerules(player, repository.find(world.id()).orElseThrow());
     }
 
     private ItemStack worldIcon(BuildWorld world) {
@@ -192,7 +222,7 @@ public final class WorldMenu implements Listener {
     private void requirePublish(Player player) { if (!player.hasPermission("nidobuilds.publish")) throw new SecurityException("Admin or owner permission required."); }
     private String prettify(String id) { String[] words = id.split("[-_]"); StringBuilder result = new StringBuilder(); for (String word : words) if (!word.isBlank()) result.append(Character.toUpperCase(word.charAt(0))).append(word.substring(1)).append(' '); return result.toString().trim(); }
 
-    private enum Mode { ROOT, DETAIL, DELETE, GAMEMODES, ICON }
+    private enum Mode { ROOT, DETAIL, DELETE, GAMEMODES, GAMERULES, ICON }
     private record State(Mode mode, String worldId, int page, String search, BuildStatus filter, boolean sortByUpdated) {
         static State root() { return new State(Mode.ROOT, null, 0, "", null, false); }
         State withPage(int value) { return new State(mode, worldId, Math.max(0, value), search, filter, sortByUpdated); }

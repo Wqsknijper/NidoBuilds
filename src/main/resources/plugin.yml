@@ -9,7 +9,7 @@ softdepend: [NidoCore, FastAsyncVoxelSniper, BuildersUtilities, AxiomPaper, Easy
 commands:
   build:
     description: Manage build worlds
-    usage: /build [menu|create|load|save|delete|publish|ready|spawn|npc|backup|setname|settheme|gamemode]
+    usage: /build [menu|create|load|save|delete|publish|ready|spawn|npc|backup|setname|settheme|gamemode|gamerule]
     aliases: [buildworld, worlds]
   buildupload:
     description: Upload one secure, single-use schematic

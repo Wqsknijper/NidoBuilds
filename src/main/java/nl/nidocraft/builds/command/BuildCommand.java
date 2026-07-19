@@ -11,6 +11,8 @@ import nl.nidocraft.builds.ui.WorldMenu;
 import nl.nidocraft.builds.world.BuildWorldService;
 import org.bson.Document;
 import org.bukkit.Material;
+import org.bukkit.GameRule;
+import nl.nidocraft.builds.world.BuildGameRules;
 import org.bukkit.World;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
@@ -53,6 +55,7 @@ public final class BuildCommand implements CommandExecutor, TabCompleter {
                 case "npc" -> location(player, args, false);
                 case "backup" -> backup(player, args);
                 case "gamemode" -> gamemode(player, args);
+                case "gamerule" -> gamerule(player, args);
                 default -> help(player);
             }
         } catch (Exception exception) { error(player, exception.getMessage() == null ? exception.getClass().getSimpleName() : exception.getMessage()); }
@@ -125,10 +128,25 @@ public final class BuildCommand implements CommandExecutor, TabCompleter {
         success(player, "Gamemode mapping updated.");
     }
 
+    private void gamerule(Player player, String[] args) {
+        if (args.length < 2) throw new IllegalArgumentException("/build gamerule <list|world> [rule] [value]");
+        if (args[1].equalsIgnoreCase("list")) {
+            String worldId = worldArgument(player, args, 2); BuildWorld build = repository.find(worldId).orElseThrow(() -> new IllegalArgumentException("Unknown world."));
+            player.sendMessage(Component.text("Game rules for " + build.name() + ":", NamedTextColor.AQUA));
+            build.gameRules().entrySet().stream().sorted(java.util.Map.Entry.comparingByKey()).forEach(entry ->
+                    player.sendMessage(Component.text(entry.getKey() + " = " + entry.getValue(), NamedTextColor.GRAY)));
+            return;
+        }
+        if (args.length < 4) throw new IllegalArgumentException("/build gamerule <world> <rule> <value>");
+        String worldId = args[1].toLowerCase(Locale.ROOT); repository.setGameRule(worldId, args[2], args[3], player.getUniqueId());
+        BuildWorld build = repository.find(worldId).orElseThrow(); worlds.load(build);
+        success(player, args[2] + " is now " + args[3] + " for " + build.name() + ".");
+    }
+
     private void help(Player player) {
         player.sendMessage(Component.text("NidoBuilds", NamedTextColor.AQUA));
         player.sendMessage(Component.text("/build menu | create | load | save | ready | publish | delete", NamedTextColor.GRAY));
-        player.sendMessage(Component.text("/build spawn|npc | backup | gamemode | setname | settheme", NamedTextColor.GRAY));
+        player.sendMessage(Component.text("/build spawn|npc | backup | gamemode | gamerule | setname | settheme", NamedTextColor.GRAY));
     }
 
     private String worldArgument(Player player, String[] args, int index) {
@@ -143,13 +161,16 @@ public final class BuildCommand implements CommandExecutor, TabCompleter {
     private void error(Player player, String text) { player.sendMessage(Component.text(text, NamedTextColor.RED)); }
 
     @Override public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
-        if (args.length == 1) return match(args[0], List.of("menu", "create", "load", "save", "ready", "publish", "delete", "spawn", "npc", "backup", "gamemode", "setname", "settheme"));
+        if (args.length == 1) return match(args[0], List.of("menu", "create", "load", "save", "ready", "publish", "delete", "spawn", "npc", "backup", "gamemode", "gamerule", "setname", "settheme"));
         if (args.length == 2 && List.of("load", "save", "ready", "publish", "delete", "setname", "settheme").contains(args[0].toLowerCase(Locale.ROOT))) return match(args[1], repository.list(false).stream().map(BuildWorld::id).toList());
         if (args.length == 2 && List.of("spawn", "npc").contains(args[0].toLowerCase(Locale.ROOT))) return match(args[1], args[0].equalsIgnoreCase("spawn") ? List.of("set", "remove", "default") : List.of("set", "remove"));
         if (args.length == 2 && args[0].equalsIgnoreCase("backup")) return match(args[1], List.of("list", "load"));
         if (args.length == 2 && args[0].equalsIgnoreCase("gamemode")) return match(args[1], List.of("list", "toggle", "activate"));
+        if (args.length == 2 && args[0].equalsIgnoreCase("gamerule")) return match(args[1], java.util.stream.Stream.concat(java.util.stream.Stream.of("list"), repository.list(false).stream().map(BuildWorld::id)).toList());
         if (args.length == 3 && List.of("spawn", "npc", "backup", "gamemode").contains(args[0].toLowerCase(Locale.ROOT))) return match(args[2], repository.list(false).stream().map(BuildWorld::id).toList());
         if (args.length == 4 && args[0].equalsIgnoreCase("gamemode")) return match(args[3], repository.gamemodes().stream().map(value -> value.getString("_id")).toList());
+        if (args.length == 3 && args[0].equalsIgnoreCase("gamerule") && !args[1].equalsIgnoreCase("list")) return match(args[2], BuildGameRules.names());
+        if (args.length == 4 && args[0].equalsIgnoreCase("gamerule")) { try { GameRule<?> rule = BuildGameRules.find(args[2]); return rule.getType() == Boolean.class ? match(args[3], List.of("true", "false")) : List.of(); } catch (IllegalArgumentException ignored) { return List.of(); } }
         return List.of();
     }
     private List<String> match(String prefix, List<String> values) { String lower = prefix.toLowerCase(Locale.ROOT); return values.stream().filter(value -> value.startsWith(lower)).toList(); }
