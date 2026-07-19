@@ -1,0 +1,29 @@
+name: NidoBuilds
+version: '${project.version}'
+main: nl.nidocraft.builds.NidoBuildsPlugin
+api-version: '26.2'
+authors: [Nidocraft]
+description: Persistent build workflow and published schematic library for Nidocraft
+depend: [FastAsyncWorldEdit]
+softdepend: [NidoCore, FastAsyncVoxelSniper, BuildersUtilities, AxiomPaper, EasyArmorStands, goPaintAdvanced]
+commands:
+  build:
+    description: Manage build worlds
+    usage: /build [menu|create|load|save|delete|publish|ready|spawn|npc|backup|setname|settheme|gamemode]
+    aliases: [buildworld, worlds]
+  buildupload:
+    description: Upload one secure, single-use schematic
+    usage: /buildupload [paste|cancel]
+permissions:
+  nidobuilds.use:
+    default: false
+  nidobuilds.manage:
+    default: false
+  nidobuilds.delete:
+    default: false
+  nidobuilds.publish:
+    default: false
+  nidobuilds.backup.restore:
+    default: false
+  nidobuilds.upload:
+    default: false

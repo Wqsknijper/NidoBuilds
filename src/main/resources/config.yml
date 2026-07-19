@@ -1,0 +1,19 @@
+mongodb:
+  uri: 'mongodb://127.0.0.1:27017/?directConnection=true'
+  database: 'nidocraft'
+storage-root: '../../data/builds'
+build-lobby-world: 'build-lobby'
+default-build-radius: 64
+autosave-minutes: 5
+scoreboard:
+  enabled: true
+upload:
+  enabled: true
+  bind-host: '127.0.0.1'
+  port: 8082
+  public-url: 'http://localhost:8082'
+  token-valid-minutes: 10
+  max-bytes: 16777216
+  max-dimension: 512
+  max-volume: 67108864
+  max-entities: 5000
