@@ -2,6 +2,7 @@ package net.nidocraft.builds;
 
 import net.nidocraft.builds.command.BuildCommand;
 import net.nidocraft.builds.command.BuildUploadCommand;
+import net.nidocraft.builds.model.BuildWorld;
 import net.nidocraft.builds.storage.BuildRepository;
 import net.nidocraft.builds.ui.SignPrompt;
 import net.nidocraft.builds.ui.WorldMenu;
@@ -23,11 +24,15 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerJoinEvent;
+import org.bukkit.event.entity.PlayerDeathEvent;
+import org.bukkit.event.player.PlayerRespawnEvent;
 import org.bukkit.generator.ChunkGenerator;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.nio.file.Path;
 import java.util.Objects;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.UUID;
 
 public final class NidoBuildsPlugin extends JavaPlugin implements Listener {
@@ -37,6 +42,7 @@ public final class NidoBuildsPlugin extends JavaPlugin implements Listener {
     private SignPrompt signs;
     private SpawnVisualizer spawnVisualizer;
     private final VoidChunkGenerator generator = new VoidChunkGenerator();
+    private final Map<UUID, String> deathWorlds = new ConcurrentHashMap<>();
 
     @Override public void onEnable() {
         saveDefaultConfig();
@@ -75,17 +81,17 @@ public final class NidoBuildsPlugin extends JavaPlugin implements Listener {
 
     private void ensureLobby() {
         String name = getConfig().getString("build-lobby-world", "build-lobby");
-        World lobby = Bukkit.getWorld(name); if (lobby == null) lobby = new WorldCreator(name).generator(generator).generateStructures(false).createWorld();
+        World lobby = Bukkit.getWorld(name);
+        boolean initialCreation = lobby == null && !Bukkit.getWorldContainer().toPath().resolve(name).toFile().exists();
+        if (lobby == null) lobby = new WorldCreator(name).generator(generator).generateStructures(false).createWorld();
         if (lobby == null) throw new IllegalStateException("Build lobby could not be created.");
-        int platformY = Math.clamp(10, lobby.getMinHeight(), lobby.getMaxHeight() - 2);
-        if (!getConfig().getBoolean("internal.platform-migrated-y10", false)) {
-            int legacyY = Math.max(64, lobby.getMinHeight() + 2) - 1;
-            if (legacyY != platformY) for (int x = -2; x <= 2; x++) for (int z = -2; z <= 2; z++)
-                if (lobby.getBlockAt(x, legacyY, z).getType() == Material.BARRIER) lobby.getBlockAt(x, legacyY, z).setType(Material.AIR, false);
-            getConfig().set("internal.platform-migrated-y10", true); saveConfig();
+        if (initialCreation) {
+            int platformY = Math.clamp(10, lobby.getMinHeight(), lobby.getMaxHeight() - 2);
+            for (int x = -2; x <= 2; x++) for (int z = -2; z <= 2; z++) lobby.getBlockAt(x, platformY, z).setType(Material.BARRIER, false);
+            lobby.setSpawnLocation(new Location(lobby, 0.5, platformY + 1, 0.5));
+            lobby.setTime(6000);
         }
-        for (int x = -2; x <= 2; x++) for (int z = -2; z <= 2; z++) lobby.getBlockAt(x, platformY, z).setType(Material.BARRIER, false);
-        lobby.setSpawnLocation(new Location(lobby, 0.5, platformY + 1, 0.5)); lobby.setTime(6000); lobby.setAutoSave(true);
+        lobby.setAutoSave(true);
         BuildGameRules.apply(lobby, BuildGameRules.defaults());
     }
 
@@ -94,6 +100,26 @@ public final class NidoBuildsPlugin extends JavaPlugin implements Listener {
         if (player.hasPermission("nidobuilds.use")) { player.setGameMode(GameMode.CREATIVE); player.setAllowFlight(true); }
         String lobbyName = getConfig().getString("build-lobby-world", "build-lobby"); World lobby = Bukkit.getWorld(lobbyName);
         if (lobby != null && !player.getWorld().getName().startsWith("build_")) Bukkit.getScheduler().runTask(this, () -> player.teleport(lobby.getSpawnLocation()));
+    }
+
+    @EventHandler public void death(PlayerDeathEvent event) {
+        deathWorlds.put(event.getPlayer().getUniqueId(), event.getPlayer().getWorld().getName());
+    }
+
+    @EventHandler public void respawn(PlayerRespawnEvent event) {
+        String worldName = deathWorlds.remove(event.getPlayer().getUniqueId());
+        if (worldName == null) return;
+        String lobbyName = getConfig().getString("build-lobby-world", "build-lobby");
+        if (worldName.equals(lobbyName)) {
+            World lobby = Bukkit.getWorld(lobbyName); if (lobby != null) event.setRespawnLocation(lobby.getSpawnLocation());
+            return;
+        }
+        if (!worldName.startsWith("build_")) return;
+        String id = worldName.substring(6); BuildWorld build = repository.find(id).filter(value -> !value.deleted()).orElse(null);
+        if (build == null) return;
+        World world = Bukkit.getWorld(worldName); if (world == null) world = worlds.load(build);
+        World respawnWorld = world;
+        event.setRespawnLocation(build.defaultSpawn().map(spawn -> spawn.in(respawnWorld)).orElse(respawnWorld.getSpawnLocation()));
     }
 
     @Override public ChunkGenerator getDefaultWorldGenerator(String worldName, String id) { return generator; }

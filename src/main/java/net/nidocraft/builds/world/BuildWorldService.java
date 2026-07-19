@@ -44,16 +44,16 @@ public final class BuildWorldService {
 
     public BuildWorld create(String rawId, String name, String icon, UUID actor, int radius) {
         String id = rawId.toLowerCase(Locale.ROOT);
-        if (!ID.matcher(id).matches()) throw new IllegalArgumentException("Id: 2-32 kleine letters/cijfers/_/-.");
-        if (name.isBlank() || name.length() > 32) throw new IllegalArgumentException("Naam: 1-32 tekens.");
+        if (!ID.matcher(id).matches()) throw new IllegalArgumentException("Id: 2-32 lowercase letters, numbers, underscores, or hyphens.");
+        if (name.isBlank() || name.length() > 32) throw new IllegalArgumentException("Name: 1-32 characters.");
         BuildWorld build = repository.create(id, name.trim(), icon, Math.clamp(radius, 16, 256), actor);
-        createWorld(build);
+        createWorld(build, true);
         return build;
     }
 
     public World load(BuildWorld build) {
         World world = Bukkit.getWorld(build.bukkitWorldName());
-        if (world == null) world = createWorld(build);
+        if (world == null) world = createWorld(build, false);
         BuildGameRules.apply(world, build.gameRules());
         if (spawnVisualizer != null) spawnVisualizer.show(build, world);
         return world;
@@ -164,15 +164,17 @@ public final class BuildWorldService {
         }
     }
 
-    private World createWorld(BuildWorld build) {
+    private World createWorld(BuildWorld build, boolean initialCreation) {
         World world = new WorldCreator(build.bukkitWorldName()).generator(generator).generateStructures(false).createWorld();
         if (world == null) throw new IllegalStateException("World could not be created.");
         world.setAutoSave(true);
         BuildGameRules.apply(world, build.gameRules());
         world.setTime(6000);
-        int platformY = Math.clamp(10, world.getMinHeight(), world.getMaxHeight() - 2);
-        for (int x = -2; x <= 2; x++) for (int z = -2; z <= 2; z++) world.getBlockAt(x, platformY, z).setType(org.bukkit.Material.BARRIER, false);
-        world.setSpawnLocation(new Location(world, 0.5, platformY + 1, 0.5));
+        if (initialCreation) {
+            int platformY = Math.clamp(10, world.getMinHeight(), world.getMaxHeight() - 2);
+            for (int x = -2; x <= 2; x++) for (int z = -2; z <= 2; z++) world.getBlockAt(x, platformY, z).setType(org.bukkit.Material.BARRIER, false);
+            world.setSpawnLocation(new Location(world, 0.5, platformY + 1, 0.5));
+        }
         if (spawnVisualizer != null) spawnVisualizer.show(build, world);
         return world;
     }
