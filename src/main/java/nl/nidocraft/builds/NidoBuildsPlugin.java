@@ -79,9 +79,15 @@ public final class NidoBuildsPlugin extends JavaPlugin implements Listener {
         String name = getConfig().getString("build-lobby-world", "build-lobby");
         World lobby = Bukkit.getWorld(name); if (lobby == null) lobby = new WorldCreator(name).generator(generator).generateStructures(false).createWorld();
         if (lobby == null) throw new IllegalStateException("Build lobby could not be created.");
-        int y = Math.max(64, lobby.getMinHeight() + 2);
-        for (int x = -2; x <= 2; x++) for (int z = -2; z <= 2; z++) lobby.getBlockAt(x, y - 1, z).setType(Material.BARRIER, false);
-        lobby.setSpawnLocation(new Location(lobby, 0.5, y, 0.5)); lobby.setTime(6000); lobby.setAutoSave(true);
+        int platformY = Math.clamp(10, lobby.getMinHeight(), lobby.getMaxHeight() - 2);
+        if (!getConfig().getBoolean("internal.platform-migrated-y10", false)) {
+            int legacyY = Math.max(64, lobby.getMinHeight() + 2) - 1;
+            if (legacyY != platformY) for (int x = -2; x <= 2; x++) for (int z = -2; z <= 2; z++)
+                if (lobby.getBlockAt(x, legacyY, z).getType() == Material.BARRIER) lobby.getBlockAt(x, legacyY, z).setType(Material.AIR, false);
+            getConfig().set("internal.platform-migrated-y10", true); saveConfig();
+        }
+        for (int x = -2; x <= 2; x++) for (int z = -2; z <= 2; z++) lobby.getBlockAt(x, platformY, z).setType(Material.BARRIER, false);
+        lobby.setSpawnLocation(new Location(lobby, 0.5, platformY + 1, 0.5)); lobby.setTime(6000); lobby.setAutoSave(true);
         BuildGameRules.apply(lobby, BuildGameRules.defaults());
     }
 

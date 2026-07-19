@@ -18,6 +18,7 @@ import com.sk89q.worldedit.session.ClipboardHolder;
 import nl.nidocraft.builds.model.BuildVersion;
 import nl.nidocraft.builds.model.BuildWorld;
 import org.bukkit.World;
+import org.bukkit.Location;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 
@@ -74,6 +75,25 @@ public final class SchematicService {
             Operations.complete(new ClipboardHolder(clipboard).createPaste(editSession)
                     .to(BlockVector3.at(0, target.getMinHeight(), 0)).ignoreAirBlocks(false)
                     .copyEntities(true).copyBiomes(true).build());
+            editSession.flushQueue();
+        }
+    }
+
+    public void pasteAt(Path schematic, World target, Location location, BuildWorld build) throws Exception {
+        if (location.getWorld() == null || !location.getWorld().equals(target)) throw new IllegalArgumentException("Paste location must be in the target world.");
+        Clipboard clipboard = read(schematic);
+        BlockVector3 origin = clipboard.getOrigin(); BlockVector3 minimum = clipboard.getRegion().getMinimumPoint(); BlockVector3 maximum = clipboard.getRegion().getMaximumPoint();
+        int targetX = location.getBlockX(); int targetY = location.getBlockY(); int targetZ = location.getBlockZ();
+        int minX = targetX + minimum.x() - origin.x(); int maxX = targetX + maximum.x() - origin.x();
+        int minY = targetY + minimum.y() - origin.y(); int maxY = targetY + maximum.y() - origin.y();
+        int minZ = targetZ + minimum.z() - origin.z(); int maxZ = targetZ + maximum.z() - origin.z();
+        if (minX < -build.radius() || maxX > build.radius() || minZ < -build.radius() || maxZ > build.radius()
+                || minY < target.getMinHeight() || maxY >= target.getMaxHeight())
+            throw new IllegalArgumentException("This paste would leave the build boundary. Move closer to the center or use a larger build world.");
+        try (EditSession editSession = WorldEdit.getInstance().newEditSession(BukkitAdapter.adapt(target))) {
+            Operations.complete(new ClipboardHolder(clipboard).createPaste(editSession)
+                    .to(BlockVector3.at(location.getBlockX(), location.getBlockY(), location.getBlockZ()))
+                    .ignoreAirBlocks(false).copyEntities(true).copyBiomes(true).build());
             editSession.flushQueue();
         }
     }

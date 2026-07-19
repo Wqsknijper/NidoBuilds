@@ -10,6 +10,11 @@ import org.bson.Document;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.event.ClickEvent;
+import net.kyori.adventure.text.event.HoverEvent;
+import net.kyori.adventure.text.format.NamedTextColor;
+import net.kyori.adventure.text.format.TextDecoration;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -33,6 +38,7 @@ import java.util.concurrent.Future;
 
 import static com.mongodb.client.model.Filters.and;
 import static com.mongodb.client.model.Filters.eq;
+import static com.mongodb.client.model.Filters.ne;
 import static com.mongodb.client.model.Updates.combine;
 import static com.mongodb.client.model.Updates.set;
 
@@ -85,6 +91,20 @@ public final class UploadService implements AutoCloseable {
     public void beginPaste(Document upload) {
         long changed = uploads.updateOne(and(eq("_id", upload.getString("_id")), eq("status", "READY")), combine(set("status", "PASTING"), set("pasteStartedAt", System.currentTimeMillis()))).getModifiedCount();
         if (changed != 1) throw new IllegalStateException("Upload is already being pasted or consumed.");
+    }
+
+    public void recordUndo(Document upload, String worldId, long version) {
+        uploads.updateOne(eq("_id", upload.getString("_id")), combine(set("undoWorldId", worldId), set("undoVersion", version), set("undone", false)));
+    }
+
+    public Document latestUndo(UUID playerId) {
+        return uploads.find(and(eq("playerId", playerId.toString()), eq("status", "CONSUMED"), ne("undone", true), ne("undoVersion", null)))
+                .sort(new Document("consumedAt", -1)).first();
+    }
+
+    public void markUndone(Document upload, UUID actor) {
+        uploads.updateOne(eq("_id", upload.getString("_id")), combine(set("undone", true), set("undoneAt", System.currentTimeMillis())));
+        repository.audit(actor, "UPLOAD_PASTE_UNDO", upload.getString("undoWorldId"), new Document("uploadId", upload.getString("_id")).append("version", upload.get("undoVersion")));
     }
 
     public Path safePath(Document upload) {
@@ -147,6 +167,7 @@ public final class UploadService implements AutoCloseable {
                     set("sha256", checksum), set("remoteAddress", ip), set("uploadedAt", System.currentTimeMillis()),
                     set("width", validation.width()), set("height", validation.height()), set("length", validation.length()), set("entities", validation.entities())));
             repository.audit(playerId, "UPLOAD_ACCEPT", null, new Document("uploadId", uploadId).append("sha256", checksum).append("size", actual).append("ip", ip).append("entities", validation.entities()));
+            notifyReady(playerId);
             respond(exchange, 200, "Upload accepted. Return in-game and run /buildupload paste. This file can be pasted once.", "text/plain; charset=utf-8");
         } catch (Exception exception) {
             Files.deleteIfExists(temporary); Files.deleteIfExists(target);
@@ -178,6 +199,17 @@ public final class UploadService implements AutoCloseable {
                 "<body><main class=card><h1>NidoBuilds</h1><p>Select one WorldEdit <code>.schem</code>. It will be validated and can be pasted once while you remain online.</p>" +
                 "<input id=f type=file accept=.schem><button id=u>Upload securely</button><p id=s></p></main><script>u.onclick=async()=>{if(!f.files[0])return;s.textContent='Uploading…';" +
                 "let r=await fetch('/?token=" + token + "',{method:'POST',headers:{'Content-Type':'application/octet-stream','X-Filename':f.files[0].name},body:f.files[0]});s.textContent=await r.text()}</script></body></html>";
+    }
+
+    private void notifyReady(UUID playerId) {
+        Bukkit.getScheduler().runTask(plugin, () -> {
+            Player player = Bukkit.getPlayer(playerId); if (player == null) return;
+            Component here = Component.text("HERE", NamedTextColor.GREEN).decorate(TextDecoration.BOLD)
+                    .clickEvent(ClickEvent.runCommand("/buildupload paste"))
+                    .hoverEvent(HoverEvent.showText(Component.text("Paste at your current location", NamedTextColor.GRAY)));
+            player.sendMessage(Component.text("Upload complete — click ", NamedTextColor.AQUA).append(here)
+                    .append(Component.text(" or use /buildupload paste to paste it.", NamedTextColor.AQUA)));
+        });
     }
 
     private String queryToken(URI uri) {

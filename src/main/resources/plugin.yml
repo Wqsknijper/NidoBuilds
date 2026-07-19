@@ -13,7 +13,7 @@ commands:
     aliases: [buildworld, worlds]
   buildupload:
     description: Upload one secure, single-use schematic
-    usage: /buildupload [paste|cancel]
+    usage: /buildupload [paste|undo|cancel]
 permissions:
   nidobuilds.use:
     default: false

@@ -2,6 +2,7 @@ package nl.nidocraft.builds.ui;
 
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
+import net.kyori.adventure.text.format.TextDecoration;
 import nl.nidocraft.builds.model.BuildStatus;
 import nl.nidocraft.builds.model.BuildWorld;
 import nl.nidocraft.builds.storage.BuildRepository;
@@ -51,7 +52,7 @@ public final class WorldMenu implements Listener {
         int pages = Math.max(1, (filtered.size() + PAGE_SIZE - 1) / PAGE_SIZE);
         int page = Math.clamp(query.page, 0, pages - 1);
         State state = new State(Mode.ROOT, null, page, query.search, query.filter, query.sortByUpdated);
-        Inventory menu = Bukkit.createInventory(null, 45, Component.text("Build worlds", NamedTextColor.DARK_AQUA));
+        Inventory menu = Bukkit.createInventory(null, 45, menuText("Build worlds", NamedTextColor.DARK_AQUA));
         int from = page * PAGE_SIZE;
         for (int index = from; index < Math.min(filtered.size(), from + PAGE_SIZE); index++) menu.setItem(index - from, worldIcon(filtered.get(index)));
         menu.setItem(36, item(Material.HOPPER, "Sort: " + (state.sortByUpdated ? "last edited" : "name"), List.of("Click to toggle")));
@@ -68,7 +69,7 @@ public final class WorldMenu implements Listener {
     }
 
     private void detail(Player player, BuildWorld world) {
-        Inventory menu = Bukkit.createInventory(null, 27, Component.text(world.name(), NamedTextColor.DARK_AQUA));
+        Inventory menu = Bukkit.createInventory(null, 27, menuText(world.name(), NamedTextColor.DARK_AQUA));
         menu.setItem(4, worldIcon(world));
         menu.setItem(10, item(Material.ENDER_PEARL, "Load", List.of("Teleport to this build world")));
         menu.setItem(11, item(Material.NAME_TAG, "Edit name", List.of(world.name())));
@@ -85,7 +86,7 @@ public final class WorldMenu implements Listener {
     }
 
     private void gamemodes(Player player, BuildWorld world) {
-        Inventory menu = Bukkit.createInventory(null, 27, Component.text("Gamemodes: " + world.name(), NamedTextColor.DARK_AQUA));
+        Inventory menu = Bukkit.createInventory(null, 27, menuText("Gamemodes: " + world.name(), NamedTextColor.DARK_AQUA));
         int slot = 0;
         for (Document game : repository.gamemodes()) {
             String id = game.getString("_id"); boolean selected = world.gamemodes().contains(id);
@@ -101,7 +102,7 @@ public final class WorldMenu implements Listener {
     }
 
     private void confirmDelete(Player player, BuildWorld world) {
-        Inventory menu = Bukkit.createInventory(null, 27, Component.text("Delete " + world.name() + "?", NamedTextColor.RED));
+        Inventory menu = Bukkit.createInventory(null, 27, menuText("Delete " + world.name() + "?", NamedTextColor.RED));
         menu.setItem(11, item(Material.LIME_CONCRETE, "Cancel", List.of()));
         menu.setItem(15, item(Material.RED_CONCRETE, "Delete permanently", List.of("Schematic backups stay forever")));
         states.put(player.getUniqueId(), new State(Mode.DELETE, world.id(), 0, "", null, false));
@@ -110,7 +111,7 @@ public final class WorldMenu implements Listener {
     }
 
     private void gamerules(Player player, BuildWorld world) {
-        Inventory menu = Bukkit.createInventory(null, 27, Component.text("Game rules: " + world.name(), NamedTextColor.DARK_AQUA));
+        Inventory menu = Bukkit.createInventory(null, 27, menuText("Game rules: " + world.name(), NamedTextColor.DARK_AQUA));
         List<Map.Entry<String, String>> entries = world.gameRules().entrySet().stream().sorted(Map.Entry.comparingByKey()).toList();
         for (int slot = 0; slot < Math.min(18, entries.size()); slot++) {
             Map.Entry<String, String> entry = entries.get(slot); boolean bool = entry.getValue().equals("true") || entry.getValue().equals("false");
@@ -124,7 +125,7 @@ public final class WorldMenu implements Listener {
     }
 
     private void chooseIcon(Player player, String id) {
-        Inventory menu = Bukkit.createInventory(null, 27, Component.text("Choose icon for " + id, NamedTextColor.DARK_AQUA));
+        Inventory menu = Bukkit.createInventory(null, 27, menuText("Choose icon for " + id, NamedTextColor.DARK_AQUA));
         List<Material> icons = List.of(Material.GRASS_BLOCK, Material.BRICKS, Material.OAK_LOG, Material.STONE_BRICKS, Material.COBBLESTONE_WALL,
                 Material.DIAMOND_BLOCK, Material.PAINTING, Material.BEACON, Material.REDSTONE_BLOCK, Material.SANDSTONE, Material.NETHER_BRICKS,
                 Material.END_STONE_BRICKS, Material.WATER_BUCKET, Material.CHERRY_LOG, Material.MOSS_BLOCK, Material.COPPER_BLOCK, Material.SNOW_BLOCK, Material.BLACKSTONE);
@@ -213,9 +214,11 @@ public final class WorldMenu implements Listener {
 
     private ItemStack item(Material material, String name, List<String> lore) {
         ItemStack stack = new ItemStack(material); ItemMeta meta = stack.getItemMeta();
-        meta.displayName(Component.text(name, NamedTextColor.AQUA));
-        meta.lore(lore.stream().map(line -> Component.text(line, NamedTextColor.GRAY)).toList()); stack.setItemMeta(meta); return stack;
+        meta.displayName(menuText(name, NamedTextColor.AQUA));
+        meta.lore(lore.stream().map(line -> menuText(line, NamedTextColor.GRAY)).toList()); stack.setItemMeta(meta); return stack;
     }
+
+    private Component menuText(String value, NamedTextColor color) { return Component.text(value, color).decoration(TextDecoration.ITALIC, false); }
 
     private void requireManage(Player player) { if (!player.hasPermission("nidobuilds.manage")) throw new SecurityException("Designer or higher permission required."); }
     private void requireDelete(Player player) { if (!player.hasPermission("nidobuilds.delete")) throw new SecurityException("Admin or owner permission required."); }

@@ -130,7 +130,9 @@ public final class BuildWorldService {
         world.setAutoSave(true);
         BuildGameRules.apply(world, build.gameRules());
         world.setTime(6000);
-        world.setSpawnLocation(0, Math.max(64, world.getMinHeight() + 2), 0);
+        int platformY = Math.clamp(10, world.getMinHeight(), world.getMaxHeight() - 2);
+        for (int x = -2; x <= 2; x++) for (int z = -2; z <= 2; z++) world.getBlockAt(x, platformY, z).setType(org.bukkit.Material.BARRIER, false);
+        world.setSpawnLocation(new Location(world, 0.5, platformY + 1, 0.5));
         return world;
     }
 }

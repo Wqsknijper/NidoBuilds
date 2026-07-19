@@ -17,7 +17,7 @@ public final class VoidChunkGenerator extends ChunkGenerator {
     @Override public boolean shouldGenerateMobs() { return false; }
     @Override public boolean shouldGenerateStructures() { return false; }
     @Override public Location getFixedSpawnLocation(World world, Random random) {
-        return new Location(world, 0.5, Math.max(64, world.getMinHeight() + 2), 0.5);
+        return new Location(world, 0.5, Math.clamp(11, world.getMinHeight() + 1, world.getMaxHeight() - 1), 0.5);
     }
     @Override public int getBaseHeight(WorldInfo worldInfo, Random random, int x, int z, HeightMap heightMap) { return worldInfo.getMinHeight(); }
 }
