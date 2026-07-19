@@ -123,10 +123,15 @@ public final class BuildCommand implements CommandExecutor, TabCompleter {
             return;
         }
         if (args.length < 4) throw new IllegalArgumentException("/build gamemode <toggle|activate> <world> <gamemode>");
-        if (args[1].equalsIgnoreCase("toggle")) repository.toggleGamemode(args[2], args[3], player.getUniqueId());
-        else if (args[1].equalsIgnoreCase("activate")) repository.activateForGamemode(args[2], args[3], player.getUniqueId());
-        else throw new IllegalArgumentException("Use toggle or activate.");
-        success(player, "Gamemode mapping updated.");
+        String worldId = args[2].toLowerCase(Locale.ROOT); String gamemodeId = args[3].toLowerCase(Locale.ROOT);
+        if (args[1].equalsIgnoreCase("toggle")) {
+            boolean selected = repository.toggleGamemode(worldId, gamemodeId, player.getUniqueId());
+            if (selected) success(player, gamemodeId + " selected. Activate the published map with /worlds gamemode activate " + worldId + " " + gamemodeId + ".");
+            else success(player, gamemodeId + " unselected. Its active deployment was cleared if this map was active.");
+        } else if (args[1].equalsIgnoreCase("activate")) {
+            repository.activateForGamemode(worldId, gamemodeId, player.getUniqueId());
+            success(player, "Published " + worldId + " activated for " + gamemodeId + "; new or restarted services will load it.");
+        } else throw new IllegalArgumentException("Use toggle or activate.");
     }
 
     private void gamerule(Player player, String[] args) {

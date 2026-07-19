@@ -11,7 +11,7 @@ NidoBuilds is the static build-service plugin for Nidocraft. Editable Bukkit wor
 - `/build spawn <set|remove|default> <world> <id>` and `/build npc <set|remove> <world> <id>` store deployable locations.
 - Configured spawns appear in loaded build worlds as runtime-only holograms with their id and coordinates; the default spawn is highlighted. Markers are removed before save/publish/backup and never written into schematics.
 - `/build backup list <world>` and `/build backup load <world> <version>` are admin/owner operations. Restore first creates a new pre-restore backup.
-- `/build gamemode toggle <world> <gamemode>` selects a world for a gamemode. After publishing, `activate` selects the exact immutable version that new services load.
+- `/build gamemode toggle <world> <gamemode>` selects or unselects a world for a gamemode; it does not deploy it. After publishing, `/build gamemode activate <world> <gamemode>` selects the exact immutable version that new or restarted services load.
 - `/build gamerule list [world]` and `/build gamerule <world> <rule> <value>` inspect or change any boolean/integer gamerule. The detail menu also has a Game rules screen.
 - `/buildupload` generates an expiring link for one validated `.schem`; `/buildupload paste` pastes it at the player's current location and consumes it after one successful paste. `/buildupload undo` restores the immutable pre-paste version.
 

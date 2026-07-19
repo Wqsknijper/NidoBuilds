@@ -155,14 +155,19 @@ public final class BuildRepository implements AutoCloseable {
         return result;
     }
 
-    public void toggleGamemode(String worldId, String gamemodeId, UUID actor) {
+    public boolean toggleGamemode(String worldId, String gamemodeId, UUID actor) {
         Document game = gamemodes.find(eq("_id", gamemodeId)).first();
         if (game == null) throw new IllegalArgumentException("Onbekende gamemode: " + gamemodeId);
         BuildWorld world = find(worldId).orElseThrow();
         List<String> selected = new ArrayList<>(world.gamemodes());
         if (!selected.remove(gamemodeId)) selected.add(gamemodeId);
+        boolean isSelected = selected.contains(gamemodeId);
         worlds.updateOne(eq("_id", worldId), combine(set("gamemodes", selected), set("updatedAt", System.currentTimeMillis())));
-        audit(actor, "WORLD_GAMEMODE_TOGGLE", worldId, new Document("gamemode", gamemodeId).append("selected", selected.contains(gamemodeId)));
+        if (!isSelected && worldId.equals(game.getString("activeWorldId"))) {
+            gamemodes.updateOne(eq("_id", gamemodeId), combine(set("activeWorldId", null), set("activeVersion", null), set("updatedAt", System.currentTimeMillis())));
+        }
+        audit(actor, "WORLD_GAMEMODE_TOGGLE", worldId, new Document("gamemode", gamemodeId).append("selected", isSelected));
+        return isSelected;
     }
 
     public void activateForGamemode(String worldId, String gamemodeId, UUID actor) {

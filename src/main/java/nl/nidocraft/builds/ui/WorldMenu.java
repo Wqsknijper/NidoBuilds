@@ -104,8 +104,8 @@ public final class WorldMenu implements Listener {
         for (Document game : repository.gamemodes()) {
             String id = game.getString("_id"); boolean selected = world.gamemodes().contains(id);
             List<String> lore = new ArrayList<>(); lore.add(selected ? "Selected" : "Not selected");
-            lore.add("Left-click: toggle"); lore.add("Right-click: make active published map");
-            if (world.id().equals(game.getString("activeWorldId"))) lore.add("ACTIVE for new services");
+            lore.add("Left-click: select/unselect only"); lore.add("Right-click: activate published version");
+            if (world.id().equals(game.getString("activeWorldId"))) lore.add("ACTIVE v" + game.get("activeVersion") + " for new services");
             menu.setItem(slot++, item(selected ? Material.LIME_DYE : Material.GRAY_DYE, game.getString("name") + " (" + id + ")", lore));
         }
         menu.setItem(22, item(Material.ARROW, "Back", List.of()));
