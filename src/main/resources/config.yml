@@ -5,8 +5,6 @@ storage-root: '../../data/builds'
 build-lobby-world: 'build-lobby'
 default-build-radius: 64
 autosave-minutes: 5
-scoreboard:
-  enabled: true
 upload:
   enabled: true
   bind-host: '127.0.0.1'

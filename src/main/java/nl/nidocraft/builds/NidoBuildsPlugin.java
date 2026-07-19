@@ -3,7 +3,6 @@ package nl.nidocraft.builds;
 import nl.nidocraft.builds.command.BuildCommand;
 import nl.nidocraft.builds.command.BuildUploadCommand;
 import nl.nidocraft.builds.storage.BuildRepository;
-import nl.nidocraft.builds.ui.BuildScoreboard;
 import nl.nidocraft.builds.ui.SignPrompt;
 import nl.nidocraft.builds.ui.WorldMenu;
 import nl.nidocraft.builds.upload.UploadService;
@@ -24,7 +23,6 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerJoinEvent;
-import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.generator.ChunkGenerator;
 import org.bukkit.plugin.java.JavaPlugin;
 
@@ -37,7 +35,6 @@ public final class NidoBuildsPlugin extends JavaPlugin implements Listener {
     private BuildWorldService worlds;
     private UploadService uploads;
     private SignPrompt signs;
-    private BuildScoreboard scoreboard;
     private SpawnVisualizer spawnVisualizer;
     private final VoidChunkGenerator generator = new VoidChunkGenerator();
 
@@ -69,9 +66,6 @@ public final class NidoBuildsPlugin extends JavaPlugin implements Listener {
 
             long autosave = Math.max(1, getConfig().getLong("autosave-minutes", 5)) * 60L * 20L;
             Bukkit.getScheduler().runTaskTimer(this, worlds::autosave, autosave, autosave);
-            if (getConfig().getBoolean("scoreboard.enabled", true)) {
-                scoreboard = new BuildScoreboard(repository); Bukkit.getScheduler().runTaskTimer(this, (Runnable) scoreboard::update, 20L, 20L);
-            }
             getLogger().info("NidoBuilds enabled: immutable schematic versions, Mongo metadata, menus and secure single-use uploads.");
         } catch (Exception exception) {
             getLogger().severe("NidoBuilds could not start: " + exception.getMessage());
@@ -100,9 +94,7 @@ public final class NidoBuildsPlugin extends JavaPlugin implements Listener {
         if (player.hasPermission("nidobuilds.use")) { player.setGameMode(GameMode.CREATIVE); player.setAllowFlight(true); }
         String lobbyName = getConfig().getString("build-lobby-world", "build-lobby"); World lobby = Bukkit.getWorld(lobbyName);
         if (lobby != null && !player.getWorld().getName().startsWith("build_")) Bukkit.getScheduler().runTask(this, () -> player.teleport(lobby.getSpawnLocation()));
-        if (scoreboard != null) scoreboard.update(player);
     }
-    @EventHandler public void quit(PlayerQuitEvent event) { if (scoreboard != null) scoreboard.remove(event.getPlayer()); }
 
     @Override public ChunkGenerator getDefaultWorldGenerator(String worldName, String id) { return generator; }
 
