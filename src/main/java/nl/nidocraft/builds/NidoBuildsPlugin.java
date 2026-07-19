@@ -12,6 +12,7 @@ import nl.nidocraft.builds.world.BuildWorldService;
 import nl.nidocraft.builds.world.BuildGameRules;
 import nl.nidocraft.builds.world.SchematicService;
 import nl.nidocraft.builds.world.VoidChunkGenerator;
+import nl.nidocraft.builds.world.SpawnVisualizer;
 import org.bukkit.Bukkit;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
@@ -37,6 +38,7 @@ public final class NidoBuildsPlugin extends JavaPlugin implements Listener {
     private UploadService uploads;
     private SignPrompt signs;
     private BuildScoreboard scoreboard;
+    private SpawnVisualizer spawnVisualizer;
     private final VoidChunkGenerator generator = new VoidChunkGenerator();
 
     @Override public void onEnable() {
@@ -48,6 +50,8 @@ public final class NidoBuildsPlugin extends JavaPlugin implements Listener {
             repository = new BuildRepository(mongoUri, database);
             SchematicService schematics = new SchematicService(storageRoot);
             worlds = new BuildWorldService(this, repository, schematics, storageRoot, generator);
+            spawnVisualizer = new SpawnVisualizer(this);
+            worlds.setSpawnVisualizer(spawnVisualizer);
             ensureLobby();
 
             signs = new SignPrompt(this);
@@ -106,6 +110,7 @@ public final class NidoBuildsPlugin extends JavaPlugin implements Listener {
         if (signs != null) signs.cancelAll();
         if (uploads != null) uploads.close();
         if (worlds != null && repository != null) worlds.autosave();
+        if (spawnVisualizer != null) spawnVisualizer.hideAll();
         if (repository != null) repository.close();
     }
 }

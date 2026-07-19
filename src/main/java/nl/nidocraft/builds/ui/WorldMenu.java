@@ -4,6 +4,7 @@ import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.TextDecoration;
 import nl.nidocraft.builds.model.BuildStatus;
+import nl.nidocraft.builds.model.BuildVersion;
 import nl.nidocraft.builds.model.BuildWorld;
 import nl.nidocraft.builds.storage.BuildRepository;
 import nl.nidocraft.builds.world.BuildWorldService;
@@ -21,6 +22,10 @@ import org.bukkit.plugin.java.JavaPlugin;
 
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.time.Duration;
+import java.time.Instant;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
@@ -35,6 +40,8 @@ public final class WorldMenu implements Listener {
     private final SignPrompt signs;
     private final Map<UUID, State> states = new HashMap<>();
     private final Map<UUID, Inventory> menus = new HashMap<>();
+    private final Map<UUID, Long> selectedVersions = new HashMap<>();
+    private static final DateTimeFormatter BACKUP_TIME = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss 'UTC'").withZone(ZoneOffset.UTC);
 
     public WorldMenu(JavaPlugin plugin, BuildRepository repository, BuildWorldService worlds, SignPrompt signs) {
         this.plugin = plugin; this.repository = repository; this.worlds = worlds; this.signs = signs;
@@ -62,6 +69,7 @@ public final class WorldMenu implements Listener {
         menu.setItem(40, item(Material.MAP, "Page " + (page + 1) + "/" + pages, List.of(filtered.size() + " worlds")));
         menu.setItem(41, item(Material.ARROW, "Next page", List.of()));
         menu.setItem(42, item(Material.CLOCK, "Refresh", List.of()));
+        menu.setItem(43, item(Material.STRUCTURE_VOID, "Deleted worlds", List.of("Browse permanent backups", "Deleted builds can be recovered")));
         menu.setItem(44, item(Material.LIME_CONCRETE, "Create world", List.of("Choose a name and icon")));
         states.put(player.getUniqueId(), state);
         player.openInventory(menu);
@@ -79,6 +87,7 @@ public final class WorldMenu implements Listener {
         menu.setItem(15, item(Material.CHEST, "Save", List.of("Creates a manual backup")));
         menu.setItem(16, item(Material.BARRIER, "Delete", List.of("Final backup is kept forever")));
         menu.setItem(17, item(Material.REPEATER, "Game rules", List.of(world.gameRules().size() + " configured", "Defaults are deployment-safe")));
+        menu.setItem(20, item(Material.ENDER_CHEST, "View backups", List.of(world.currentVersion() + " immutable snapshots", "Restore or recover a copy")));
         menu.setItem(22, item(Material.ARROW, "Back", List.of()));
         states.put(player.getUniqueId(), new State(Mode.DETAIL, world.id(), 0, "", null, false));
         player.openInventory(menu);
@@ -135,6 +144,62 @@ public final class WorldMenu implements Listener {
         menus.put(player.getUniqueId(), menu);
     }
 
+    private void backups(Player player, BuildWorld world, int requestedPage) {
+        List<BuildVersion> versions = repository.versions(world.id());
+        int pageSize = 45;
+        int pages = Math.max(1, (versions.size() + pageSize - 1) / pageSize);
+        int page = Math.clamp(requestedPage, 0, pages - 1);
+        Inventory menu = Bukkit.createInventory(null, 54, menuText("Backups: " + world.name(), NamedTextColor.DARK_AQUA));
+        int from = page * pageSize;
+        for (int index = from; index < Math.min(versions.size(), from + pageSize); index++) {
+            menu.setItem(index - from, backupItem(versions.get(index)));
+        }
+        menu.setItem(45, item(Material.ARROW, "Previous page", List.of()));
+        menu.setItem(48, item(Material.COMPASS, "Back", List.of(world.deleted() ? "Deleted worlds" : world.name())));
+        menu.setItem(49, item(Material.MAP, "Page " + (page + 1) + "/" + pages, List.of(versions.size() + " backups")));
+        menu.setItem(53, item(Material.ARROW, "Next page", List.of()));
+        states.put(player.getUniqueId(), new State(Mode.BACKUPS, world.id(), page, "", null, false));
+        player.openInventory(menu); menus.put(player.getUniqueId(), menu);
+    }
+
+    private void backupOptions(Player player, BuildWorld world, BuildVersion version) {
+        selectedVersions.put(player.getUniqueId(), version.number());
+        Inventory menu = Bukkit.createInventory(null, 27, menuText("Backup v" + version.number(), NamedTextColor.DARK_AQUA));
+        menu.setItem(4, backupItem(version));
+        if (!world.deleted()) menu.setItem(10, item(Material.RECOVERY_COMPASS, "Restore current world", List.of("Makes a safety backup first", "Requires confirmation")));
+        menu.setItem(13, item(Material.OAK_SAPLING, "Restore as a new world", List.of("Keeps the current world untouched", "Also works for deleted worlds")));
+        menu.setItem(22, item(Material.ARROW, "Back", List.of()));
+        states.put(player.getUniqueId(), new State(Mode.BACKUP_OPTIONS, world.id(), 0, "", null, false));
+        player.openInventory(menu); menus.put(player.getUniqueId(), menu);
+    }
+
+    private void confirmRestore(Player player, BuildWorld world, BuildVersion version) {
+        selectedVersions.put(player.getUniqueId(), version.number());
+        Inventory menu = Bukkit.createInventory(null, 27, menuText("Restore " + world.name() + "?", NamedTextColor.RED));
+        menu.setItem(4, backupItem(version));
+        menu.setItem(11, item(Material.LIME_CONCRETE, "Cancel", List.of("Nothing will change")));
+        menu.setItem(15, item(Material.RED_CONCRETE, "Confirm restore", List.of("Current state is backed up first", "Then v" + version.number() + " is restored")));
+        states.put(player.getUniqueId(), new State(Mode.BACKUP_CONFIRM, world.id(), 0, "", null, false));
+        player.openInventory(menu); menus.put(player.getUniqueId(), menu);
+    }
+
+    private void archived(Player player, int requestedPage) {
+        List<BuildWorld> deleted = repository.list(true).stream().filter(BuildWorld::deleted).toList();
+        int pages = Math.max(1, (deleted.size() + PAGE_SIZE - 1) / PAGE_SIZE);
+        int page = Math.clamp(requestedPage, 0, pages - 1);
+        Inventory menu = Bukkit.createInventory(null, 45, menuText("Deleted worlds", NamedTextColor.DARK_AQUA));
+        int from = page * PAGE_SIZE;
+        for (int index = from; index < Math.min(deleted.size(), from + PAGE_SIZE); index++) {
+            BuildWorld world = deleted.get(index);
+            menu.setItem(index - from, item(Material.SKELETON_SKULL, world.name(), List.of("ID: " + world.id(), repository.versions(world.id()).size() + " backups retained", "Click to recover")));
+        }
+        menu.setItem(39, item(Material.ARROW, "Previous page", List.of()));
+        menu.setItem(40, item(Material.COMPASS, "Back", List.of("Build worlds")));
+        menu.setItem(41, item(Material.ARROW, "Next page", List.of()));
+        states.put(player.getUniqueId(), new State(Mode.ARCHIVED, null, page, "", null, false));
+        player.openInventory(menu); menus.put(player.getUniqueId(), menu);
+    }
+
     @EventHandler public void click(InventoryClickEvent event) {
         if (!(event.getWhoClicked() instanceof Player player)) return;
         State state = states.get(player.getUniqueId());
@@ -149,6 +214,10 @@ public final class WorldMenu implements Listener {
                 case GAMEMODES -> gamemodeClick(player, state, slot, event.isRightClick());
                 case GAMERULES -> gameruleClick(player, state, slot, event.isRightClick(), event.isShiftClick());
                 case ICON -> { if (slot < 18 && event.getCurrentItem() != null) { requireManage(player); BuildWorld created = worlds.create(state.worldId, prettify(state.worldId), event.getCurrentItem().getType().name(), player.getUniqueId(), plugin.getConfig().getInt("default-build-radius", 64)); detail(player, created); } }
+                case BACKUPS -> backupClick(player, state, slot);
+                case BACKUP_OPTIONS -> backupOptionsClick(player, state, slot);
+                case BACKUP_CONFIRM -> backupConfirmClick(player, state, slot);
+                case ARCHIVED -> archivedClick(player, state, slot);
             }
         } catch (Exception exception) { player.sendMessage(Component.text(exception.getMessage() == null ? exception.getClass().getSimpleName() : exception.getMessage(), NamedTextColor.RED)); }
     }
@@ -166,6 +235,7 @@ public final class WorldMenu implements Listener {
         else if (slot == 39) open(player, state.withPage(state.page - 1));
         else if (slot == 41) open(player, state.withPage(state.page + 1));
         else if (slot == 42) open(player, state);
+        else if (slot == 43) archived(player, 0);
         else if (slot == 44) { requireManage(player); player.closeInventory(); signs.open(player, "new world id", value -> { String id = value.toLowerCase(Locale.ROOT).replace(' ', '-'); chooseIcon(player, id); }); }
     }
 
@@ -178,7 +248,68 @@ public final class WorldMenu implements Listener {
         else if (slot == 15) { long version = worlds.save(world.id(), "manual", player.getUniqueId()).number(); player.sendMessage(Component.text("Saved backup version " + version, NamedTextColor.GREEN)); detail(player, repository.find(world.id()).orElseThrow()); }
         else if (slot == 16) { requireDelete(player); confirmDelete(player, world); }
         else if (slot == 17) gamerules(player, world);
+        else if (slot == 20) backups(player, world, 0);
         else if (slot == 22) open(player, State.root());
+    }
+
+    private void backupClick(Player player, State state, int slot) {
+        BuildWorld world = repository.find(state.worldId).orElseThrow();
+        List<BuildVersion> versions = repository.versions(world.id());
+        if (slot < 45) {
+            int index = state.page * 45 + slot;
+            if (index < versions.size()) backupOptions(player, world, versions.get(index));
+        } else if (slot == 45) backups(player, world, state.page - 1);
+        else if (slot == 48) { if (world.deleted()) archived(player, 0); else detail(player, world); }
+        else if (slot == 53) backups(player, world, state.page + 1);
+    }
+
+    private void backupOptionsClick(Player player, State state, int slot) {
+        BuildWorld world = repository.find(state.worldId).orElseThrow();
+        BuildVersion version = selectedVersion(player, world);
+        if (slot == 10 && !world.deleted()) { requireRestore(player); confirmRestore(player, world, version); }
+        else if (slot == 13) {
+            requireRestore(player);
+            player.closeInventory();
+            signs.open(player, "new world id", value -> {
+                try {
+                    BuildWorld restored = worlds.restoreAsNew(world.id(), version.number(), value, player.getUniqueId());
+                    org.bukkit.World loaded = worlds.load(restored);
+                    player.teleport(restored.defaultSpawn().map(spawn -> spawn.in(loaded)).orElse(loaded.getSpawnLocation()));
+                    player.sendMessage(Component.text("Backup restored as " + restored.name() + ".", NamedTextColor.GREEN));
+                    detail(player, restored);
+                } catch (Exception exception) {
+                    player.sendMessage(Component.text(exception.getMessage() == null ? "Restore failed." : exception.getMessage(), NamedTextColor.RED));
+                }
+            });
+        } else if (slot == 22) backups(player, world, 0);
+    }
+
+    private void backupConfirmClick(Player player, State state, int slot) throws Exception {
+        BuildWorld world = repository.find(state.worldId).orElseThrow();
+        BuildVersion version = selectedVersion(player, world);
+        if (slot == 11) backupOptions(player, world, version);
+        else if (slot == 15) {
+            requireRestore(player);
+            worlds.restore(world.id(), version.number(), player.getUniqueId());
+            player.sendMessage(Component.text("Restored v" + version.number() + "; the previous state was backed up first.", NamedTextColor.GREEN));
+            backups(player, repository.find(world.id()).orElseThrow(), 0);
+        }
+    }
+
+    private void archivedClick(Player player, State state, int slot) {
+        List<BuildWorld> deleted = repository.list(true).stream().filter(BuildWorld::deleted).toList();
+        if (slot < PAGE_SIZE) {
+            int index = state.page * PAGE_SIZE + slot;
+            if (index < deleted.size()) backups(player, deleted.get(index), 0);
+        } else if (slot == 39) archived(player, state.page - 1);
+        else if (slot == 40) open(player, State.root());
+        else if (slot == 41) archived(player, state.page + 1);
+    }
+
+    private BuildVersion selectedVersion(Player player, BuildWorld world) {
+        Long number = selectedVersions.get(player.getUniqueId());
+        if (number == null) throw new IllegalStateException("Select a backup first.");
+        return repository.version(world.id(), number).orElseThrow(() -> new IllegalStateException("Backup no longer available."));
     }
 
     private void gamemodeClick(Player player, State state, int slot, boolean activate) {
@@ -212,6 +343,44 @@ public final class WorldMenu implements Listener {
         return item(material, world.name(), lore);
     }
 
+    private ItemStack backupItem(BuildVersion version) {
+        String actor = version.createdBy().getMostSignificantBits() == 0 && version.createdBy().getLeastSignificantBits() == 0
+                ? "Automatic system" : Bukkit.getOfflinePlayer(version.createdBy()).getName();
+        if (actor == null) actor = version.createdBy().toString().substring(0, 8);
+        return item(backupMaterial(version.kind()), "Backup v" + version.number(), List.of(
+                "Type: " + version.kind(),
+                "Backed up by: " + actor,
+                "Backup date: " + BACKUP_TIME.format(version.createdAt()),
+                "Created " + relativeAge(version.createdAt()) + " ago",
+                "Size: " + fileSize(version.size()),
+                "Checksum: " + version.sha256().substring(0, Math.min(12, version.sha256().length())),
+                "Click to see options"
+        ));
+    }
+
+    private Material backupMaterial(String kind) {
+        if (kind.equals("publish")) return Material.END_ROD;
+        if (kind.equals("deleted")) return Material.SOUL_TORCH;
+        if (kind.startsWith("before-restore")) return Material.RECOVERY_COMPASS;
+        return Material.REDSTONE_TORCH;
+    }
+
+    private String relativeAge(Instant instant) {
+        long seconds = Math.max(0, Duration.between(instant, Instant.now()).getSeconds());
+        if (seconds < 60) return seconds + " seconds";
+        long minutes = seconds / 60; if (minutes < 60) return minutes + " minutes";
+        long hours = minutes / 60; if (hours < 24) return hours + " hours";
+        long days = hours / 24; if (days < 14) return days + " days";
+        long weeks = days / 7; if (weeks < 9) return weeks + " weeks";
+        return (days / 30) + " months";
+    }
+
+    private String fileSize(long bytes) {
+        if (bytes < 1024) return bytes + " B";
+        if (bytes < 1024 * 1024) return String.format(Locale.ROOT, "%.1f KiB", bytes / 1024.0);
+        return String.format(Locale.ROOT, "%.1f MiB", bytes / (1024.0 * 1024.0));
+    }
+
     private ItemStack item(Material material, String name, List<String> lore) {
         ItemStack stack = new ItemStack(material); ItemMeta meta = stack.getItemMeta();
         meta.displayName(menuText(name, NamedTextColor.AQUA));
@@ -223,9 +392,10 @@ public final class WorldMenu implements Listener {
     private void requireManage(Player player) { if (!player.hasPermission("nidobuilds.manage")) throw new SecurityException("Designer or higher permission required."); }
     private void requireDelete(Player player) { if (!player.hasPermission("nidobuilds.delete")) throw new SecurityException("Admin or owner permission required."); }
     private void requirePublish(Player player) { if (!player.hasPermission("nidobuilds.publish")) throw new SecurityException("Admin or owner permission required."); }
+    private void requireRestore(Player player) { if (!player.hasPermission("nidobuilds.backup.restore")) throw new SecurityException("Admin or owner permission required."); }
     private String prettify(String id) { String[] words = id.split("[-_]"); StringBuilder result = new StringBuilder(); for (String word : words) if (!word.isBlank()) result.append(Character.toUpperCase(word.charAt(0))).append(word.substring(1)).append(' '); return result.toString().trim(); }
 
-    private enum Mode { ROOT, DETAIL, DELETE, GAMEMODES, GAMERULES, ICON }
+    private enum Mode { ROOT, DETAIL, DELETE, GAMEMODES, GAMERULES, ICON, BACKUPS, BACKUP_OPTIONS, BACKUP_CONFIRM, ARCHIVED }
     private record State(Mode mode, String worldId, int page, String search, BuildStatus filter, boolean sortByUpdated) {
         static State root() { return new State(Mode.ROOT, null, 0, "", null, false); }
         State withPage(int value) { return new State(mode, worldId, Math.max(0, value), search, filter, sortByUpdated); }

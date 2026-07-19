@@ -32,12 +32,15 @@ public final class BuildWorldService {
     private final Path archivesRoot;
     private final VoidChunkGenerator generator;
     private final Set<String> saving = ConcurrentHashMap.newKeySet();
+    private SpawnVisualizer spawnVisualizer;
 
     public BuildWorldService(JavaPlugin plugin, BuildRepository repository, SchematicService schematics, Path storageRoot, VoidChunkGenerator generator) throws IOException {
         this.plugin = plugin; this.repository = repository; this.schematics = schematics; this.generator = generator;
         archivesRoot = storageRoot.resolve("deleted-world-folders").toAbsolutePath().normalize();
         Files.createDirectories(archivesRoot);
     }
+
+    public void setSpawnVisualizer(SpawnVisualizer spawnVisualizer) { this.spawnVisualizer = spawnVisualizer; }
 
     public BuildWorld create(String rawId, String name, String icon, UUID actor, int radius) {
         String id = rawId.toLowerCase(Locale.ROOT);
@@ -52,6 +55,7 @@ public final class BuildWorldService {
         World world = Bukkit.getWorld(build.bukkitWorldName());
         if (world == null) world = createWorld(build);
         BuildGameRules.apply(world, build.gameRules());
+        if (spawnVisualizer != null) spawnVisualizer.show(build, world);
         return world;
     }
 
@@ -60,8 +64,14 @@ public final class BuildWorldService {
         if (!saving.add(id)) throw new IllegalStateException("Deze world wordt al opgeslagen.");
         try {
             World world = load(build);
-            world.save();
-            BuildVersion version = schematics.save(build, world, repository.nextVersion(id), kind, actor);
+            if (spawnVisualizer != null) spawnVisualizer.hide(world);
+            BuildVersion version;
+            try {
+                world.save();
+                version = schematics.save(build, world, repository.nextVersion(id), kind, actor);
+            } finally {
+                if (spawnVisualizer != null) spawnVisualizer.show(repository.find(id).orElse(build), world);
+            }
             BuildStatus status;
             if (kind.equals("publish")) status = BuildStatus.PUBLISHED;
             else {
@@ -86,6 +96,35 @@ public final class BuildWorldService {
         schematics.paste(version.schematic(), load(build), build);
         repository.setStatus(id, BuildStatus.EDITED, actor);
         repository.audit(actor, "WORLD_RESTORE", id, new org.bson.Document("restoredVersion", versionNumber));
+        refreshVisuals(repository.find(id).orElse(build));
+    }
+
+    public BuildWorld restoreAsNew(String sourceId, long versionNumber, String rawId, UUID actor) throws Exception {
+        BuildWorld source = repository.find(sourceId).orElseThrow(() -> new IllegalArgumentException("Onbekende bronworld."));
+        BuildVersion version = repository.version(sourceId, versionNumber).orElseThrow(() -> new IllegalArgumentException("Onbekende backupversie."));
+        if (!Files.isRegularFile(version.schematic())) throw new IllegalStateException("Het backupbestand ontbreekt op disk.");
+        String id = rawId.toLowerCase(Locale.ROOT).replace(' ', '-');
+        String suffix = " backup v" + versionNumber;
+        String baseName = source.name().substring(0, Math.min(source.name().length(), 32 - Math.min(31, suffix.length())));
+        String restoredName = (baseName + suffix).substring(0, Math.min(32, baseName.length() + suffix.length()));
+        BuildWorld target = create(id, restoredName, source.icon(), actor, source.radius());
+        repository.setText(id, "theme", source.theme(), actor);
+        repository.setLocations(id, "spawns", source.spawns(), source.defaultSpawnId(), actor);
+        repository.setLocations(id, "npcs", source.npcs(), null, actor);
+        for (var rule : source.gameRules().entrySet()) repository.setGameRule(id, rule.getKey(), rule.getValue(), actor);
+        target = repository.find(id).orElseThrow();
+        schematics.paste(version.schematic(), load(target), target);
+        BuildVersion restored = save(id, "restored-from-" + sourceId + "-v" + versionNumber, actor);
+        repository.audit(actor, "WORLD_RESTORE_AS_NEW", id, new org.bson.Document("sourceWorld", sourceId)
+                .append("sourceVersion", versionNumber).append("newVersion", restored.number()));
+        target = repository.find(id).orElseThrow();
+        refreshVisuals(target);
+        return target;
+    }
+
+    public void refreshVisuals(BuildWorld build) {
+        World world = Bukkit.getWorld(build.bukkitWorldName());
+        if (world != null && spawnVisualizer != null) spawnVisualizer.show(build, world);
     }
 
     public BuildVersion delete(String id, UUID actor) throws Exception {
@@ -94,6 +133,7 @@ public final class BuildWorldService {
         World world = Bukkit.getWorld(build.bukkitWorldName());
         Path source = world == null ? null : world.getWorldFolder().toPath().toAbsolutePath().normalize();
         if (world != null) {
+            if (spawnVisualizer != null) spawnVisualizer.hide(world);
             World lobby = Bukkit.getWorld(plugin.getConfig().getString("build-lobby-world", "build-lobby"));
             Location fallback = lobby == null ? null : lobby.getSpawnLocation();
             for (Player player : new ArrayList<>(world.getPlayers())) {
@@ -133,6 +173,7 @@ public final class BuildWorldService {
         int platformY = Math.clamp(10, world.getMinHeight(), world.getMaxHeight() - 2);
         for (int x = -2; x <= 2; x++) for (int z = -2; z <= 2; z++) world.getBlockAt(x, platformY, z).setType(org.bukkit.Material.BARRIER, false);
         world.setSpawnLocation(new Location(world, 0.5, platformY + 1, 0.5));
+        if (spawnVisualizer != null) spawnVisualizer.show(build, world);
         return world;
     }
 }

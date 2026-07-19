@@ -98,6 +98,7 @@ public final class BuildCommand implements CommandExecutor, TabCompleter {
             if (values.stream().noneMatch(value -> value.id().equals(id))) throw new IllegalArgumentException("Unknown spawn."); defaultId = id;
         } else throw new IllegalArgumentException("Use set, remove" + (spawn ? " or default." : "."));
         repository.setLocations(worldId, spawn ? "spawns" : "npcs", values, defaultId, player.getUniqueId());
+        if (spawn) worlds.refreshVisuals(repository.find(worldId).orElseThrow());
         success(player, type + " locations updated (" + values.size() + ").");
     }
 
